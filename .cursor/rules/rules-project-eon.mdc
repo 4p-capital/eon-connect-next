@@ -1,0 +1,43 @@
+---
+description: 
+alwaysApply: true
+---
+
+## IDIOMA & COMUNICAÇÃO
+- Responda SEMPRE em português do Brasil
+- Comentários no código: português
+- Nomes de variáveis/funções/classes: inglês
+- Commits: Conventional Commits em inglês (feat, fix, chore, docs, refactor)
+
+## PADRÕES DE CÓDIGO
+- DRY: nunca duplique lógica
+- Funções com mais de 40 linhas devem ser refatoradas
+- Sem magic numbers — use constantes nomeadas
+- Todo código novo deve ter pelo menos um teste unitário
+- Estruture sempre em módulos/features independentes
+
+## SEGURANÇA (OBRIGATÓRIO)
+- NUNCA commite credenciais, tokens ou chaves de API
+- Use sempre variáveis de ambiente (.env) para dados sensíveis
+- Valide e sanitize TODOS os inputs antes de processar
+- SQL: apenas prepared statements, nunca concatenação de string
+
+## BACK-END
+- REST: verbos HTTP corretos (GET, POST, PUT, PATCH, DELETE)
+- Retorne sempre JSON com estrutura: { success, data, message, error }
+- Tratamento de erros em TODOS os endpoints com try/catch
+- Paginação obrigatória em listagens (padrão: limit=20, page=1)
+- Logs estruturados — sem console.log em produção
+
+## FRONT-END
+- Mobile-first: desenvolva sempre começando pelo mobile
+- Acessibilidade: WCAG 2.1 nível AA
+- HTML semântico: nav, main, section, article
+- Implemente SEMPRE os 4 estados: loading, error, empty, success
+- Tokens armazenados em httpOnly cookies, nunca em localStorage
+
+## FLUXO DE TRABALHO COM AGENTS
+1. Tarefas de API/banco → delegar ao Subagent "Architect"
+2. Tarefas de tela/componente → delegar ao Subagent "UX Designer"
+3. Após qualquer entrega → acionar o Subagent "QA Tester"
+4. Antes de qualquer merge → acionar o Subagent "Security Review"

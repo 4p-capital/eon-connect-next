@@ -1,0 +1,139 @@
+---
+description: Especialista em integração Clicksign API v3.0 com Node.js/TypeScript
+globs: ["**/*clicksign*", "**/services/clicksign*", "**/webhooks/clicksign*", "**/contracts*"]
+alwaysApply: false
+---
+
+# Agente Especialista — Clicksign API v3.0
+
+Você é especialista na integração da API da Clicksign com Node.js/TypeScript.
+Sempre que o usuário pedir algo relacionado a assinatura de documentos, contratos ou Clicksign, siga rigorosamente estas instruções.
+
+---
+
+## Contexto da API
+
+- **API version:** v3.0 (JSON:API spec)
+- **Sandbox:** `https://sandbox.clicksign.com`
+- **Produção:** `https://app.clicksign.com`
+- **Auth:** header `Authorization: ACCESS_TOKEN` (nunca query string)
+- **Headers obrigatórios em todo request:**
+  ```
+  Content-Type: application/vnd.api+json
+  Accept: application/vnd.api+json
+  ```
+
+---
+
+## Regras de Implementação
+
+### 1. Variáveis de ambiente
+Sempre use variáveis de ambiente. Nunca hardcode token ou URL.
+```
+CLICKSIGN_BASE_URL=https://sandbox.clicksign.com
+CLICKSIGN_ACCESS_TOKEN=seu_token
+```
+
+### 2. Fluxo obrigatório para envio de contrato
+O agente NUNCA deve pular etapas. A ordem é sempre:
+1. `POST /api/v3/envelopes` → salvar `envelopeId`
+2. `POST /api/v3/envelopes/:id/documents` → salvar `documentId` (PDF em base64)
+3. `POST /api/v3/envelopes/:id/signers` → salvar `signerId`
+4. `POST /api/v3/envelopes/:id/requirements` → requisito de **qualificação** (`action: "agree"`)
+5. `POST /api/v3/envelopes/:id/requirements` → requisito de **autenticação** (`action: "provide_evidence"`)
+6. `PATCH /api/v3/envelopes/:id` → ativar com `status: "running"`
+
+### 3. Requisitos são obrigatórios em dupla
+Todo par signatário+documento PRECISA de DOIS requisitos:
+- Qualificação: `{ action: "agree", role: "sign" }`
+- Autenticação: `{ action: "provide_evidence", auth: "email" }`
+Se faltar um, a ativação falha com 422.
+
+### 4. Webhook handler
+- SEMPRE retornar HTTP 200, mesmo em caso de erro interno
+- Processar de forma assíncrona (não bloquear o response)
+- Eventos críticos a tratar: `sign`, `close`, `cancel`, `refusal`
+
+### 5. Tratamento de erros
+- Logar sempre: method, path, status code, request body, response body
+- Erros 4xx = problema na requisição (ver campo `errors[].detail`)
+- Erro 503 = conta sem acesso à API de Envelope (criada antes de 01/07/2024)
+- Erro 401 = token inválido ou header `Authorization` errado
+
+### 6. TypeScript
+- Sempre tipar os retornos da API
+- Usar `async/await`, nunca `.then()` encadeado
+- Isolar toda lógica Clicksign em um service dedicado (`clicksign.service.ts`)
+- Nunca chamar a API Clicksign diretamente de controllers ou rotas
+
+### 7. Migração Sandbox → Produção
+Apenas trocar `CLICKSIGN_BASE_URL` e `CLICKSIGN_ACCESS_TOKEN`.
+O comportamento da API é idêntico nos dois ambientes.
+
+---
+
+## Estrutura de Arquivos Recomendada
+
+```
+src/
+├── services/
+│   └── clicksign.service.ts      # cliente e lógica de negócio
+├── webhooks/
+│   └── clicksign.webhook.ts      # handler de eventos
+├── types/
+│   └── clicksign.types.ts        # tipagens da API
+└── routes/
+    └── webhooks.route.ts         # rota POST /webhooks/clicksign
+```
+
+---
+
+## Referência dos Endpoints Principais
+
+| Ação | Método | Path |
+|------|--------|------|
+| Criar envelope | POST | `/api/v3/envelopes` |
+| Upload documento | POST | `/api/v3/envelopes/:id/documents` |
+| Adicionar signatário | POST | `/api/v3/envelopes/:id/signers` |
+| Criar requisito | POST | `/api/v3/envelopes/:id/requirements` |
+| Ativar envelope | PATCH | `/api/v3/envelopes/:id` |
+| Listar envelopes | GET | `/api/v3/envelopes` |
+| Buscar envelope | GET | `/api/v3/envelopes/:id` |
+| Cancelar envelope | PATCH | `/api/v3/envelopes/:id` (`status: "canceled"`) |
+| Notificar signatário | POST | `/api/v3/envelopes/:id/signers/:signer_id/notifications` |
+| Notificar todos | POST | `/api/v3/envelopes/:id/notifications` |
+
+---
+
+## Tipos de Requisito
+
+### Qualificação (role)
+- `sign` — Assinante
+- `witness` — Testemunha
+- `party` — Parte
+- `intervening` — Interveniente
+
+### Autenticação (auth)
+- `email` — Token por e-mail
+- `sms` — Token por SMS
+- `pix` — Autenticação via Pix
+- `biometrics` — Biometria facial
+- `liveness` — Prova de vida
+
+---
+
+## Status do Envelope
+
+| Status | Descrição |
+|--------|-----------|
+| `draft` | Rascunho, ainda editável |
+| `running` | Ativo, aguardando assinaturas |
+| `closed` | Todos assinaram |
+| `canceled` | Cancelado |
+
+---
+
+## Documentação de referência
+- Guia completo: `.cursor/rules/clicksign-api-integration.md`
+- Docs oficiais: https://developers.clicksign.com/docs/introducao-a-documentacao
+- Referência da API: https://developers.clicksign.com/reference

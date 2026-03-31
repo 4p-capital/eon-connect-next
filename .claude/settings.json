@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find 'c:\\\\Users\\\\4P\\\\Documents\\\\Dev Projetos\\\\BP\\\\eon-connect-next' -maxdepth 2 -name mcp* -o -name .mcp* -o -name claude* -o -name *claude*)",
+      "Bash(find 'c:\\\\Users\\\\4P\\\\Documents\\\\Dev Projetos\\\\BP\\\\eon-connect-next' -maxdepth 2 -type f -name *.md)",
+      "Bash(npm install:*)",
+      "Bash(node -e \"const {z} = require\\(''zod''\\); console.log\\(typeof z.object, typeof z.string\\)\")",
+      "Bash(npx vitest:*)",
+      "WebSearch",
+      "Read(//c/Users/4P/Documents/**)"
+    ]
+  }
+}
