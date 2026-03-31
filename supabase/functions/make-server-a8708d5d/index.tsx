@@ -1513,8 +1513,8 @@ app.patch("/make-server-a8708d5d/assistencia/:id/contato", async (c) => {
     const { data, error } = await supabase
       .from('clientes')
       .update(updateData)
-      .eq('id', assistencia.id_cliente)
-      .select('id, proprietario, cpf, email')
+      .eq('id_cliente', assistencia.id_cliente)
+      .select('id_cliente, proprietario, cpf, email')
       .single();
 
     if (error) {
