@@ -25,12 +25,27 @@ const ZAPI_CLIENT_TOKEN = Deno.env.get("ZAPI_CLIENT_TOKEN")!;
 // const WHATSAPP_META_TOKEN = Deno.env.get("WHATSAPP_META_TOKEN")!;
 // const WHATSAPP_PHONE_NUMBER_ID = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID") || "943238462209611";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, Accept",
-  "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
-  "Access-Control-Max-Age": "86400",
-};
+// CORS com allowlist de origens
+const ALLOWED_ORIGINS = [
+  "https://connect.eonbr.com",
+  "https://eon-connect-next.vercel.app",
+  "http://localhost:3000",
+  "http://localhost:3001",
+];
+
+function getCorsHeaders(req?: Request) {
+  const origin = req?.headers.get("Origin") || "";
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, Accept",
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+    "Access-Control-Max-Age": "86400",
+  };
+}
+
+// corsHeaders é atualizado por request no router
+let corsHeaders = getCorsHeaders();
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -399,7 +414,7 @@ async function handleSendEnvelope(req: Request): Promise<Response> {
   } catch (error) {
     console.error("❌ Erro ao enviar envelope Clicksign:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
+      JSON.stringify({ error: "Erro ao processar envio do envelope. Tente novamente." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
@@ -410,10 +425,14 @@ async function handleSendEnvelope(req: Request): Promise<Response> {
 async function handleWebhook(req: Request): Promise<Response> {
   const body = await req.text();
 
-  // Verificar HMAC (se configurado)
+  // Verificar HMAC — obrigatório quando secret está configurado
   const hmacHeader = req.headers.get("Content-Hmac");
   const webhookSecret = Deno.env.get("CLICKSIGN_WEBHOOK_SECRET");
-  if (webhookSecret && hmacHeader) {
+  if (webhookSecret) {
+    if (!hmacHeader) {
+      console.error("❌ Header Content-Hmac ausente no webhook");
+      return new Response("Unauthorized", { status: 401 });
+    }
     const encoder = new TextEncoder();
     const key = await crypto.subtle.importKey(
       "raw", encoder.encode(webhookSecret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
@@ -427,14 +446,6 @@ async function handleWebhook(req: Request): Promise<Response> {
   }
 
   const event = JSON.parse(body);
-  console.log(`📩 Webhook Clicksign recebido: ${JSON.stringify(event)}`);
-
-  // Salvar payload bruto para debug
-  const debugSupabase = getSupabaseClient();
-  await debugSupabase.from("kv_store_a8708d5d").upsert({
-    key: `clicksign_webhook_${Date.now()}`,
-    value: { raw_body: body, parsed: event, received_at: new Date().toISOString() },
-  });
 
   // Extrair evento e identificadores do payload Clicksign
   const eventType = event?.event?.name;
@@ -724,8 +735,9 @@ async function handleResend(req: Request): Promise<Response> {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
+    console.error("❌ Erro ao reenviar:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
+      JSON.stringify({ error: "Erro ao reenviar notificação. Tente novamente." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
@@ -890,6 +902,9 @@ async function handlePostAvaliacao(req: Request): Promise<Response> {
 // ── Router ─────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
+  // Atualizar CORS headers para este request
+  corsHeaders = getCorsHeaders(req);
+
   // CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
