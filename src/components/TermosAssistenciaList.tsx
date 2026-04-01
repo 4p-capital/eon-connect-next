@@ -546,21 +546,6 @@ export function TermosAssistenciaList() {
                               <Download className="w-4 h-4" />
                             </button>
                           )}
-                          {isSiengeFalhou(termo) && (
-                            <button
-                              onClick={() => reenviarSienge(termo)}
-                              disabled={reenviando === termo.id}
-                              className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-black text-white hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                              title="Reenviar ao Sienge"
-                            >
-                              {reenviando === termo.id ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <RefreshCw className="w-3.5 h-3.5" />
-                              )}
-                              Sienge
-                            </button>
-                          )}
                         </div>
                       </td>
                     </tr>
@@ -620,20 +605,6 @@ export function TermosAssistenciaList() {
                       >
                         <Download className="w-3.5 h-3.5" />
                         PDF
-                      </button>
-                    )}
-                    {isSiengeFalhou(termo) && (
-                      <button
-                        onClick={() => reenviarSienge(termo)}
-                        disabled={reenviando === termo.id}
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-black text-white hover:bg-gray-800 disabled:opacity-50 transition-colors"
-                      >
-                        {reenviando === termo.id ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <RefreshCw className="w-3.5 h-3.5" />
-                        )}
-                        Reenviar Sienge
                       </button>
                     )}
                   </div>
