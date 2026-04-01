@@ -465,6 +465,203 @@ app.get("/make-server-a8708d5d/assistencia-count", async (c) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
+// 📊 DASHBOARD STATS — Agregações server-side para gráficos e contadores
+// Resolve: gráficos baseados em dados parciais (50 registros) vs totais reais
+// ═══════════════════════════════════════════════════════════════════
+
+app.get("/make-server-a8708d5d/dashboard-stats", async (c) => {
+  try {
+    const dataInicio = c.req.query('dataInicio');
+    const dataFim = c.req.query('dataFim');
+
+    console.log(`📊 [dashboard-stats] dataInicio=${dataInicio || 'N/A'}, dataFim=${dataFim || 'N/A'}`);
+
+    // Helper para aplicar filtro de data em queries
+    const applyDateFilter = (query: any, column = 'created_at') => {
+      if (dataInicio) query = query.gte(column, `${dataInicio}T00:00:00-03:00`);
+      if (dataFim) query = query.lte(column, `${dataFim}T23:59:59-03:00`);
+      return query;
+    };
+
+    // ── TODAS AS QUERIES EM PARALELO ──────────────────────────────
+    const [
+      // Counts
+      countTotal,
+      countDesqualificados,
+      countAbertos,
+      countVistoria,
+      countReparo,
+      countAguardandoAssinatura,
+      countFinalizado,
+      // Chart data (colunas mínimas, sem limite)
+      dataEmpreendimento,
+      dataCategoria,
+      dataEmpresa,
+      // Responsáveis (de finalizadas)
+      dataResponsaveis,
+      // Insumos (material + quantidade)
+      dataInsumos,
+      // NPS (da tabela avaliacoes_nps)
+      dataNps,
+    ] = await Promise.all([
+      // ── Counts ──
+      applyDateFilter(supabase.from('Assistência Técnica').select('id', { count: 'exact', head: true })).then((r: any) => r.count || 0),
+      applyDateFilter(supabase.from('Assistência Técnica').select('id', { count: 'exact', head: true }).eq('situacao', 'Desqualificado')).then((r: any) => r.count || 0),
+      applyDateFilter(supabase.from('Assistência Técnica').select('id', { count: 'exact', head: true }).eq('situacao', 'Ativo').eq('status_chamado', 'Abertos')).then((r: any) => r.count || 0),
+      applyDateFilter(supabase.from('Assistência Técnica').select('id', { count: 'exact', head: true }).eq('situacao', 'Ativo').eq('status_chamado', 'Vistoria agendada')).then((r: any) => r.count || 0),
+      applyDateFilter(supabase.from('Assistência Técnica').select('id', { count: 'exact', head: true }).eq('situacao', 'Ativo').eq('status_chamado', 'Reparo agendado')).then((r: any) => r.count || 0),
+      applyDateFilter(supabase.from('assistencia_finalizada').select('id', { count: 'exact', head: true }).eq('status', 'Aguardando assinatura')).then((r: any) => r.count || 0),
+      applyDateFilter(supabase.from('assistencia_finalizada').select('id', { count: 'exact', head: true }).eq('status', 'Finalizado')).then((r: any) => r.count || 0),
+
+      // ── Chart: empreendimento (via JOIN com clientes) ──
+      applyDateFilter(
+        supabase.from('Assistência Técnica')
+          .select('clientes!id_cliente(empreendimento)')
+          .neq('situacao', 'Desqualificado')
+      ).then((r: any) => r.data || []),
+
+      // ── Chart: categoria ──
+      applyDateFilter(
+        supabase.from('Assistência Técnica')
+          .select('categoria_reparo')
+          .neq('situacao', 'Desqualificado')
+      ).then((r: any) => r.data || []),
+
+      // ── Chart: empresa ──
+      applyDateFilter(
+        supabase.from('Assistência Técnica')
+          .select('idempresa, Empresa(nome)')
+          .neq('situacao', 'Desqualificado')
+      ).then((r: any) => r.data || []),
+
+      // ── Chart: responsáveis (de finalizadas) ──
+      applyDateFilter(
+        supabase.from('assistencia_finalizada').select('responsaveis')
+      ).then((r: any) => r.data || []),
+
+      // ── Chart: insumos (material + quantidade) ──
+      applyDateFilter(
+        supabase.from('itens_utilizados_posobra').select('material_utilizado, quantidade')
+      ).then((r: any) => r.data || []),
+
+      // ── NPS: da tabela avaliacoes_nps ──
+      (() => {
+        let q = supabase.from('avaliacoes_nps').select('nota').eq('status', 'respondida');
+        if (dataInicio) q = q.gte('responded_at', `${dataInicio}T00:00:00-03:00`);
+        if (dataFim) q = q.lte('responded_at', `${dataFim}T23:59:59-03:00`);
+        return q.then((r: any) => r.data || []);
+      })(),
+    ]);
+
+    // ── AGREGAÇÕES EM MEMÓRIA ─────────────────────────────────────
+
+    // Empreendimento
+    const porEmpreendimento: Record<string, number> = {};
+    for (const row of dataEmpreendimento) {
+      const nome = (row as any).clientes?.empreendimento || 'Não informado';
+      porEmpreendimento[nome] = (porEmpreendimento[nome] || 0) + 1;
+    }
+    const chartEmpreendimento = Object.entries(porEmpreendimento)
+      .map(([nome, total]) => ({ nome, total }))
+      .sort((a, b) => b.total - a.total);
+
+    // Categoria
+    const porCategoria: Record<string, number> = {};
+    for (const row of dataCategoria) {
+      const nome = (row as any).categoria_reparo || 'Não informado';
+      porCategoria[nome] = (porCategoria[nome] || 0) + 1;
+    }
+    const chartCategoria = Object.entries(porCategoria)
+      .map(([nome, total]) => ({ nome, total }))
+      .sort((a, b) => b.total - a.total);
+
+    // Empresa
+    const porEmpresa: Record<string, number> = {};
+    for (const row of dataEmpresa) {
+      const nome = (row as any).Empresa?.nome || 'Não informado';
+      porEmpresa[nome] = (porEmpresa[nome] || 0) + 1;
+    }
+    const chartEmpresa = Object.entries(porEmpresa)
+      .map(([nome, total]) => ({ nome, total }))
+      .sort((a, b) => b.total - a.total);
+
+    // Responsáveis
+    const porResponsavel: Record<string, number> = {};
+    for (const row of dataResponsaveis) {
+      const resps = (row as any).responsaveis;
+      if (Array.isArray(resps)) {
+        for (const r of resps) porResponsavel[r || 'Não informado'] = (porResponsavel[r || 'Não informado'] || 0) + 1;
+      } else if (resps) {
+        porResponsavel[resps] = (porResponsavel[resps] || 0) + 1;
+      }
+    }
+    const chartResponsavel = Object.entries(porResponsavel)
+      .map(([nome, total]) => ({ nome, total }))
+      .sort((a, b) => b.total - a.total);
+
+    // Top 10 Insumos (soma de quantidade, não contagem de ocorrências)
+    const porInsumo: Record<string, number> = {};
+    for (const row of dataInsumos) {
+      const material = (row as any).material_utilizado || 'Material não informado';
+      const qty = parseFloat((row as any).quantidade) || 0;
+      porInsumo[material] = (porInsumo[material] || 0) + qty;
+    }
+    const chartTopInsumos = Object.entries(porInsumo)
+      .map(([nome, quantidade]) => ({ nome, quantidade: Math.round(quantidade * 100) / 100 }))
+      .sort((a, b) => b.quantidade - a.quantidade)
+      .slice(0, 10);
+
+    // NPS (da tabela avaliacoes_nps)
+    let npsMedia: number | null = null;
+    let npsTotalAvaliacoes = 0;
+    if (dataNps.length > 0) {
+      let soma = 0;
+      for (const row of dataNps) {
+        const nota = (row as any).nota;
+        if (nota !== null && nota !== undefined && nota >= 1 && nota <= 10) {
+          soma += nota;
+          npsTotalAvaliacoes++;
+        }
+      }
+      if (npsTotalAvaliacoes > 0) npsMedia = soma / npsTotalAvaliacoes;
+    }
+
+    const totalAtivos = countAbertos + countVistoria + countReparo;
+
+    console.log(`📊 [dashboard-stats] Total=${countTotal}, Ativos=${totalAtivos}, Desq=${countDesqualificados}, NPS=${npsMedia?.toFixed(1) || 'N/A'} (${npsTotalAvaliacoes} aval.)`);
+
+    return c.json({
+      counts: {
+        total: countTotal,
+        procedentes: countTotal - countDesqualificados,
+        desqualificados: countDesqualificados,
+        abertos: countAbertos,
+        vistoriaAgendada: countVistoria,
+        reparoAgendado: countReparo,
+        aguardandoAssinatura: countAguardandoAssinatura,
+        finalizado: countFinalizado,
+        totalFinalizacoes: countAguardandoAssinatura + countFinalizado,
+      },
+      charts: {
+        porEmpreendimento: chartEmpreendimento,
+        porCategoria: chartCategoria,
+        porEmpresa: chartEmpresa,
+        porResponsavel: chartResponsavel,
+        topInsumos: chartTopInsumos,
+      },
+      nps: {
+        media: npsMedia,
+        totalAvaliacoes: npsTotalAvaliacoes,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('❌ Erro em /dashboard-stats:', error);
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
 // 🏥 ROTA DE SOLICITAÇÃO PÚBLICA (SIMPLIFICADA)
 // ═══════════════════════════════════════════════════════════════════
 
