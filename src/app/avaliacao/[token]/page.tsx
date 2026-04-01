@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
-import { Star, Send, Loader2, CheckCircle2, AlertCircle, Wrench, Calendar, Tag, MessageSquare } from "lucide-react";
+import { Send, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { projectId, publicAnonKey } from "@/utils/supabase/info";
 
 interface AvaliacaoData {
@@ -48,27 +48,18 @@ export default function AvaliacaoPage() {
     try {
       const resp = await fetch(
         `https://${projectId}.supabase.co/functions/v1/clicksign/avaliacao?token=${token}`,
-        {
-          headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-            apikey: publicAnonKey,
-          },
-        }
+        { headers: { Authorization: `Bearer ${publicAnonKey}`, apikey: publicAnonKey } }
       );
-
       if (!resp.ok) {
         const data = await resp.json();
-        setErro(data.error || "Avaliação não encontrada.");
+        setErro(data.error || "Avaliacao nao encontrada.");
         return;
       }
-
       const data = await resp.json();
-      if (data.status === "respondida") {
-        setEnviado(true);
-      }
+      if (data.status === "respondida") setEnviado(true);
       setDados(data);
     } catch {
-      setErro("Erro ao carregar avaliação. Tente novamente.");
+      setErro("Erro ao carregar avaliacao. Tente novamente.");
     } finally {
       setCarregando(false);
     }
@@ -77,45 +68,33 @@ export default function AvaliacaoPage() {
   const enviarAvaliacao = async () => {
     if (!nota) return;
     setEnviando(true);
-
     try {
       const resp = await fetch(
         `https://${projectId}.supabase.co/functions/v1/clicksign/avaliacao`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`,
-            apikey: publicAnonKey,
-          },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${publicAnonKey}`, apikey: publicAnonKey },
           body: JSON.stringify({ token, nota, comentario: comentario.trim() || null }),
         }
       );
-
       if (resp.ok) {
         setEnviado(true);
       } else {
         const data = await resp.json();
-        setErro(data.error || "Erro ao enviar avaliação.");
+        setErro(data.error || "Erro ao enviar avaliacao.");
       }
     } catch {
-      setErro("Erro de conexão. Tente novamente.");
+      setErro("Erro de conexao. Tente novamente.");
     } finally {
       setEnviando(false);
     }
   };
 
   const formatarData = (dataStr: string | null | undefined) => {
-    if (!dataStr) return "---";
+    if (!dataStr) return null;
     try {
-      return new Date(dataStr).toLocaleDateString("pt-BR", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      });
-    } catch {
-      return "---";
-    }
+      return new Date(dataStr).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
+    } catch { return null; }
   };
 
   const getNotaColor = (n: number, isActive: boolean) => {
@@ -133,20 +112,15 @@ export default function AvaliacaoPage() {
     if (nota <= 4) return { emoji: "😕", text: "Abaixo do esperado" };
     if (nota <= 6) return { emoji: "😐", text: "Pode melhorar" };
     if (nota <= 8) return { emoji: "😊", text: "Bom trabalho!" };
-    if (nota === 9) return { emoji: "😄", text: "Ótimo serviço!" };
+    if (nota === 9) return { emoji: "😄", text: "Otimo servico!" };
     return { emoji: "🤩", text: "Excelente! Obrigado!" };
   };
 
   // ── Loading ──
   if (carregando) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 rounded-full bg-white shadow-md flex items-center justify-center mx-auto mb-4">
-            <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-          </div>
-          <p className="text-sm text-gray-500">Carregando avaliação...</p>
-        </div>
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-gray-300" />
       </div>
     );
   }
@@ -154,13 +128,10 @@ export default function AvaliacaoPage() {
   // ── Erro ──
   if (erro && !dados) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 max-w-md w-full text-center">
-          <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
-            <AlertCircle className="h-8 w-8 text-red-400" />
-          </div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">Avaliação indisponível</h2>
-          <p className="text-sm text-gray-500 leading-relaxed">{erro}</p>
+      <div className="min-h-screen bg-white flex items-center justify-center p-6">
+        <div className="text-center max-w-sm">
+          <AlertCircle className="h-10 w-10 text-gray-300 mx-auto mb-4" />
+          <p className="text-sm text-gray-500">{erro}</p>
         </div>
       </div>
     );
@@ -169,22 +140,17 @@ export default function AvaliacaoPage() {
   // ── Sucesso ──
   if (enviado) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-green-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 max-w-md w-full text-center">
-          <div className="relative mx-auto mb-6">
-            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto">
-              <CheckCircle2 className="h-10 w-10 text-green-600" />
-            </div>
-            <div className="absolute -top-1 -right-1 text-3xl animate-bounce" style={{ right: 'calc(50% - 50px)' }}>
-              🎉
-            </div>
+      <div className="min-h-screen bg-white flex items-center justify-center p-6">
+        <div className="text-center max-w-sm">
+          <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-5">
+            <CheckCircle2 className="h-8 w-8 text-emerald-500" />
           </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Obrigado pela sua avaliação!</h2>
-          <p className="text-sm text-gray-500 leading-relaxed">
-            Sua opinião é muito importante para continuarmos melhorando nossos serviços.
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">Obrigado!</h2>
+          <p className="text-sm text-gray-400 leading-relaxed">
+            Sua avaliacao foi registrada com sucesso. Ela nos ajuda a melhorar nossos servicos.
           </p>
-          <div className="mt-6 pt-5 border-t border-gray-100">
-            <p className="text-xs text-gray-400">BP Incorporadora</p>
+          <div className="mt-8 pt-6 border-t border-gray-100">
+            <p className="text-[11px] text-gray-300 font-medium tracking-wide uppercase">BP Incorporadora</p>
           </div>
         </div>
       </div>
@@ -194,98 +160,49 @@ export default function AvaliacaoPage() {
   const nomeCliente = dados?.cliente?.proprietario || "Cliente";
   const primeiroNome = nomeCliente.split(" ")[0];
   const notaInfo = getNotaEmoji();
+  const responsaveis = dados?.assistencia_finalizada?.responsaveis;
+  const responsaveisStr = Array.isArray(responsaveis) ? responsaveis.join(", ") : responsaveis;
+  const dataFinalizado = formatarData(dados?.assistencia_finalizada?.created_at);
 
-  // ── Formulario ──
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 max-w-lg w-full overflow-hidden">
-        {/* Header com gradiente */}
-        <div className="bg-gradient-to-r from-gray-900 to-gray-800 text-white px-6 py-6">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center">
-              <Star className="h-4 w-4" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold tracking-tight">Avaliação do Serviço</h1>
-              <p className="text-xs text-gray-400">BP Incorporadora</p>
-            </div>
-          </div>
-        </div>
+    <div className="min-h-screen bg-white flex flex-col">
+      {/* Conteudo centralizado */}
+      <div className="flex-1 flex items-center justify-center px-6 py-10">
+        <div className="w-full max-w-md space-y-8">
 
-        <div className="p-6 space-y-5">
           {/* Saudacao */}
-          <div className="text-center pb-1">
-            <p className="text-lg text-gray-800">
-              Olá, <span className="font-bold text-gray-900">{primeiroNome}</span>! 👋
-            </p>
-            <p className="text-sm text-gray-500 mt-1">
-              Sua avaliação nos ajuda a melhorar cada vez mais.
-            </p>
-          </div>
-
-          {/* Dados do chamado */}
-          <div className="bg-gradient-to-br from-gray-50 to-gray-50/50 rounded-xl border border-gray-100 p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Wrench className="h-3.5 w-3.5 text-gray-400" />
-              <p className="text-xs font-bold text-black uppercase tracking-wider">
-                Solicitação N. {dados?.id_assistencia}
-              </p>
-            </div>
-            <div className="space-y-2.5">
-              {dados?.assistencia?.categoria_reparo && (
-                <div className="flex items-start gap-2.5">
-                  <Tag className="h-3.5 w-3.5 text-gray-300 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1 flex justify-between items-center">
-                    <span className="text-xs text-gray-400">Categoria</span>
-                    <span className="text-xs text-gray-700 font-semibold bg-white px-2.5 py-1 rounded-md border border-gray-100">
-                      {dados.assistencia.categoria_reparo}
-                    </span>
-                  </div>
-                </div>
-              )}
-              {dados?.assistencia?.descricao_cliente && (
-                <div className="flex items-start gap-2.5">
-                  <MessageSquare className="h-3.5 w-3.5 text-gray-300 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1">
-                    <span className="text-xs text-gray-400">Descrição</span>
-                    <p className="text-xs text-gray-600 mt-0.5 leading-relaxed">{dados.assistencia.descricao_cliente}</p>
-                  </div>
-                </div>
-              )}
-              {dados?.assistencia_finalizada?.responsaveis && dados.assistencia_finalizada.responsaveis.length > 0 && (
-                <div className="flex items-start gap-2.5">
-                  <Wrench className="h-3.5 w-3.5 text-gray-300 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1 flex justify-between items-center">
-                    <span className="text-xs text-gray-400">Responsavel</span>
-                    <span className="text-xs text-gray-700 font-semibold bg-white px-2.5 py-1 rounded-md border border-gray-100">
-                      {Array.isArray(dados.assistencia_finalizada.responsaveis)
-                        ? dados.assistencia_finalizada.responsaveis.join(', ')
-                        : dados.assistencia_finalizada.responsaveis}
-                    </span>
-                  </div>
-                </div>
-              )}
-              {dados?.assistencia_finalizada?.created_at && (
-                <div className="flex items-start gap-2.5">
-                  <Calendar className="h-3.5 w-3.5 text-gray-300 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1 flex justify-between items-center">
-                    <span className="text-xs text-gray-400">Finalizado em</span>
-                    <span className="text-xs text-gray-700 font-semibold">
-                      {formatarData(dados.assistencia_finalizada.created_at)}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Nota - NPS */}
           <div>
-            <label className="block text-sm font-semibold text-gray-800 mb-1">
-              Como você avalia o reparo realizado?
-            </label>
-            <p className="text-xs text-gray-400 mb-4">Selecione uma nota de 1 a 10</p>
-            <div className="flex justify-center gap-1.5">
+            <p className="text-[11px] text-gray-300 font-medium tracking-wide uppercase mb-3">BP Incorporadora</p>
+            <h1 className="text-2xl font-bold text-gray-900 leading-tight">
+              Ola, {primeiroNome}.
+            </h1>
+            <p className="text-sm text-gray-400 mt-1.5 leading-relaxed">
+              Seu reparo foi finalizado{dataFinalizado ? ` em ${dataFinalizado}` : ''}.
+              {responsaveisStr ? ` Responsavel: ${responsaveisStr}.` : ''}
+            </p>
+          </div>
+
+          {/* Resumo compacto */}
+          <div className="flex items-center gap-3 py-3 border-y border-gray-100">
+            <div className="w-1 h-8 bg-black rounded-full" />
+            <div>
+              <p className="text-xs font-semibold text-gray-900">
+                #{dados?.id_assistencia} - {dados?.assistencia?.categoria_reparo || 'Assistencia Tecnica'}
+              </p>
+              {dados?.assistencia?.descricao_cliente && (
+                <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{dados.assistencia.descricao_cliente}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Pergunta + Notas */}
+          <div>
+            <h2 className="text-base font-semibold text-gray-900 mb-1">
+              Como voce avalia o reparo?
+            </h2>
+            <p className="text-xs text-gray-400 mb-5">Selecione uma nota de 1 a 10</p>
+
+            <div className="flex justify-between gap-1">
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => {
                 const isActive = hoverNota !== null ? n <= hoverNota : nota !== null && n <= nota;
                 const refNota = hoverNota ?? nota ?? 0;
@@ -296,10 +213,10 @@ export default function AvaliacaoPage() {
                     onClick={() => setNota(n)}
                     onMouseEnter={() => setHoverNota(n)}
                     onMouseLeave={() => setHoverNota(null)}
-                    className={`w-9 h-9 rounded-xl text-xs font-bold border transition-all duration-150 ${
+                    className={`flex-1 aspect-square max-w-[40px] rounded-xl text-xs font-bold border transition-all duration-150 ${
                       isActive
-                        ? `${getNotaColor(refNota, true)} shadow-md scale-105`
-                        : `${getNotaColor(n, false)} hover:scale-105 hover:border-gray-300`
+                        ? `${getNotaColor(refNota, true)} shadow-md scale-110`
+                        : `${getNotaColor(n, false)} hover:scale-110 hover:border-gray-300`
                     }`}
                   >
                     {n}
@@ -307,13 +224,15 @@ export default function AvaliacaoPage() {
                 );
               })}
             </div>
-            <div className="flex justify-between text-[10px] text-gray-300 mt-2 px-1">
+
+            <div className="flex justify-between text-[10px] text-gray-300 mt-2 px-0.5">
               <span>Ruim</span>
               <span>Excelente</span>
             </div>
+
             {notaInfo && (
-              <div className="text-center mt-3 animate-in fade-in duration-300">
-                <span className="text-2xl">{notaInfo.emoji}</span>
+              <div className="text-center mt-4 animate-in fade-in duration-300">
+                <span className="text-3xl">{notaInfo.emoji}</span>
                 <p className="text-xs text-gray-500 mt-1 font-medium">{notaInfo.text}</p>
               </div>
             )}
@@ -321,14 +240,10 @@ export default function AvaliacaoPage() {
 
           {/* Comentario */}
           <div>
-            <label className="block text-sm font-semibold text-gray-800 mb-1">
-              Deixe um comentário
-            </label>
-            <p className="text-xs text-gray-400 mb-2">Elogios, reclamações ou sugestões (opcional)</p>
             <textarea
               value={comentario}
               onChange={(e) => setComentario(e.target.value)}
-              placeholder="Conte-nos mais sobre sua experiência..."
+              placeholder="Deixe um comentario (opcional)"
               rows={3}
               className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 transition-all placeholder:text-gray-300"
             />
@@ -336,34 +251,27 @@ export default function AvaliacaoPage() {
 
           {/* Erro */}
           {erro && (
-            <div className="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-3 flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 flex-shrink-0" />
-              {erro}
-            </div>
+            <p className="text-sm text-red-500 text-center">{erro}</p>
           )}
 
           {/* Botao */}
           <button
             onClick={enviarAvaliacao}
             disabled={!nota || enviando}
-            className="w-full bg-gradient-to-r from-gray-900 to-gray-800 hover:from-gray-800 hover:to-gray-700 text-white font-semibold py-3.5 px-6 rounded-xl transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm hover:shadow-md active:scale-[0.98]"
+            className="w-full bg-black hover:bg-gray-800 text-white font-medium py-3.5 rounded-xl transition-all disabled:opacity-20 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-[0.98]"
           >
             {enviando ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Enviando avaliação...
-              </>
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <>
                 <Send className="h-4 w-4" />
-                Enviar avaliação
+                Enviar avaliacao
               </>
             )}
           </button>
 
-          {/* Footer */}
-          <p className="text-center text-[10px] text-gray-300 pt-1">
-            Seus dados estão protegidos e esta avaliação é confidencial.
+          <p className="text-center text-[10px] text-gray-300">
+            Avaliacao confidencial
           </p>
         </div>
       </div>
