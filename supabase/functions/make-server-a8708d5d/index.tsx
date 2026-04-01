@@ -541,7 +541,7 @@ app.get("/make-server-a8708d5d/dashboard-stats", async (c) => {
 
       // ── Chart: insumos (material + quantidade) ──
       applyDateFilter(
-        supabase.from('itens_utilizados_posobra').select('material_utilizado, quantidade')
+        supabase.from('itens_utilizados_posobra').select('material_utilizado, medida, quantidade')
       ).then((r: any) => r.data || []),
 
       // ── NPS: da tabela avaliacoes_nps ──
@@ -600,14 +600,18 @@ app.get("/make-server-a8708d5d/dashboard-stats", async (c) => {
       .sort((a, b) => b.total - a.total);
 
     // Top 10 Insumos (soma de quantidade, não contagem de ocorrências)
-    const porInsumo: Record<string, number> = {};
+    const porInsumo: Record<string, { quantidade: number; medida: string }> = {};
     for (const row of dataInsumos) {
       const material = (row as any).material_utilizado || 'Material não informado';
       const qty = parseFloat((row as any).quantidade) || 0;
-      porInsumo[material] = (porInsumo[material] || 0) + qty;
+      const medida = (row as any).medida || 'Un';
+      if (!porInsumo[material]) {
+        porInsumo[material] = { quantidade: 0, medida };
+      }
+      porInsumo[material].quantidade += qty;
     }
     const chartTopInsumos = Object.entries(porInsumo)
-      .map(([nome, quantidade]) => ({ nome, quantidade: Math.round(quantidade * 100) / 100 }))
+      .map(([nome, { quantidade, medida }]) => ({ nome, quantidade: Math.round(quantidade * 100) / 100, medida }))
       .sort((a, b) => b.quantidade - a.quantidade)
       .slice(0, 10);
 

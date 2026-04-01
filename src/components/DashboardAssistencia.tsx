@@ -20,6 +20,7 @@ interface DadosAgrupados {
 interface DadosInsumo {
   nome: string;
   quantidade: number;
+  medida: string;
 }
 
 interface InsumoUtilizado {
@@ -804,7 +805,13 @@ export function DashboardAssistencia() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                     <XAxis dataKey="nome" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={{ stroke: '#e2e8f0' }} angle={-45} textAnchor="end" height={100} interval={0} tickLine={false} />
                     <YAxis tick={{ fill: '#64748b', fontSize: 11 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} allowDecimals={false} label={{ value: 'Quantidade', angle: -90, position: 'insideLeft', style: { fontSize: 11, fill: '#64748b' } }} />
-                    <Tooltip contentStyle={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '12px', padding: '8px 12px' }} formatter={(value: any) => [`${value}`, 'Quantidade']} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '12px', padding: '8px 12px' }}
+                      formatter={(value: any, _name: any, props: any) => {
+                        const medida = props?.payload?.medida || 'Un';
+                        return [`${value} ${medida}`, 'Quantidade'];
+                      }}
+                    />
                     <Bar dataKey="quantidade" radius={[4, 4, 0, 0]} name="Quantidade">
                       {charts!.topInsumos.map((_, i) => <Cell key={`cell-${i}`} fill={CORES_GRAFICO[i % CORES_GRAFICO.length]} />)}
                     </Bar>
