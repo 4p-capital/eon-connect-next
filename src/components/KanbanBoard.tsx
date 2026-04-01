@@ -2476,17 +2476,7 @@ const KanbanCard = memo(function KanbanCard(props: KanbanCardProps) {
               </Button>
             )}
 
-            {/* Reenviar Termo - Aguardando assinatura */}
-            {solicitacao.status_chamado === 'Aguardando assinatura' && solicitacao.id_finalizacao && (
-              <button
-                onClick={() => { reenviarTermo(solicitacao); }}
-                disabled={carregando}
-                className="flex items-center justify-center gap-2 text-xs text-gray-700 hover:text-black font-medium border border-gray-200 rounded-lg px-3 py-2 w-full transition-all hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${carregando ? 'animate-spin' : ''}`} />
-                {carregando ? 'Enviando...' : 'Reenviar Termo'}
-              </button>
-            )}
+            {/* Reenviar Termo removido — fluxo automático via webhook */}
 
             {/* Gerar Termo PDF - 7 dias vencido */}
             {solicitacao.status_chamado === 'Aguardando assinatura' && solicitacao.id_finalizacao && passaram7Dias() && (
@@ -3254,7 +3244,7 @@ const KanbanCard = memo(function KanbanCard(props: KanbanCardProps) {
                   Abrir PDF salvo
                 </button>
               )}
-              {/* Botão Enviar ao Sienge */}
+              {/* Status do Sienge — envio automático via webhook, sem botão manual */}
               {enviadoSienge ? (
                 <div className="space-y-1">
                   <div className="flex items-center justify-center gap-2 py-2 text-sm text-blue-600 font-medium bg-blue-50 rounded-lg border border-blue-200">
@@ -3268,59 +3258,9 @@ const KanbanCard = memo(function KanbanCard(props: KanbanCardProps) {
                   )}
                 </div>
               ) : (
-                <div className="space-y-2">
-                  <button
-                    onClick={enviarParaSienge}
-                    disabled={enviandoSienge}
-                    className="flex items-center justify-center gap-1.5 text-xs text-white bg-blue-600 hover:bg-blue-700 font-medium rounded-lg px-3 py-2.5 w-full transition-colors disabled:opacity-50"
-                  >
-                    {enviandoSienge ? (
-                      <>
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        Enviando ao Sienge...
-                      </>
-                    ) : (
-                      <>
-                        <Building2 className="h-3.5 w-3.5" />
-                        {erroSienge ? 'Tentar novamente' : 'Enviar ao Sienge'}
-                      </>
-                    )}
-                  </button>
-
-                  {/* Alerta + Botão de finalização manual (só aparece após erro do Sienge) */}
-                  {erroSienge && (
-                    <div className="space-y-2">
-                      <div className="flex items-start gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg">
-                        <AlertCircle className="h-3.5 w-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
-                        <div className="space-y-0.5">
-                          <p className="text-[11px] font-medium text-amber-800">Sincronização falhou</p>
-                          <p className="text-[10px] text-amber-600 leading-tight">
-                            {erroSiengeMsg || 'Cliente não encontrado no Sienge.'}
-                          </p>
-                          <p className="text-[10px] text-amber-500 leading-tight">
-                            Você pode subir o PDF manualmente no Sienge e finalizar o chamado aqui.
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        onClick={finalizarManualmente}
-                        disabled={finalizandoManual}
-                        className="flex items-center justify-center gap-1.5 text-xs text-white bg-amber-600 hover:bg-amber-700 font-medium rounded-lg px-3 py-2.5 w-full transition-colors disabled:opacity-50"
-                      >
-                        {finalizandoManual ? (
-                          <>
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            Finalizando...
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                            Finalizar Manualmente
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  )}
+                <div className="flex items-center justify-center gap-2 py-2 text-sm text-gray-400 font-medium bg-gray-50 rounded-lg border border-gray-200">
+                  <Building2 className="h-4 w-4" />
+                  Sienge pendente
                 </div>
               )}
             </div>
