@@ -252,6 +252,19 @@ export default function AvaliacaoPage() {
                   </div>
                 </div>
               )}
+              {dados?.assistencia_finalizada?.responsaveis && dados.assistencia_finalizada.responsaveis.length > 0 && (
+                <div className="flex items-start gap-2.5">
+                  <Wrench className="h-3.5 w-3.5 text-gray-300 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 flex justify-between items-center">
+                    <span className="text-xs text-gray-400">Responsavel</span>
+                    <span className="text-xs text-gray-700 font-semibold bg-white px-2.5 py-1 rounded-md border border-gray-100">
+                      {Array.isArray(dados.assistencia_finalizada.responsaveis)
+                        ? dados.assistencia_finalizada.responsaveis.join(', ')
+                        : dados.assistencia_finalizada.responsaveis}
+                    </span>
+                  </div>
+                </div>
+              )}
               {dados?.assistencia_finalizada?.created_at && (
                 <div className="flex items-start gap-2.5">
                   <Calendar className="h-3.5 w-3.5 text-gray-300 mt-0.5 flex-shrink-0" />
