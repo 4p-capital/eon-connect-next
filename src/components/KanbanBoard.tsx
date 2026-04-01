@@ -3009,9 +3009,9 @@ const KanbanCard = memo(function KanbanCard(props: KanbanCardProps) {
       </Dialog>
 
       {/* Modal Preview do Termo antes de enviar ao Clicksign */}
-      <Dialog open={mostrarPreviewTermo} onOpenChange={() => {}}>
+      <Dialog open={mostrarPreviewTermo} onOpenChange={(open) => { if (!open) { setMostrarPreviewTermo(false); setDadosTermoPreview(null); setFotoBase64Preview(null); setRequestBodyPreview(null); } }}>
         <DialogContent
-          className="sm:max-w-3xl max-h-[90vh] overflow-y-auto [&>button:last-child]:hidden"
+          className="sm:max-w-3xl max-h-[90vh] overflow-y-auto"
           onInteractOutside={(e) => e.preventDefault()}
           onEscapeKeyDown={(e) => e.preventDefault()}
         >
