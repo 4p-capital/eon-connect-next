@@ -88,23 +88,40 @@ siengeRoutes.post("/assistencia-finalizada/:id/enviar-sienge", async (c) => {
     console.log(`   CPF formatado: ${cpfFormatado}`);
     console.log(`   CPF limpo: ${cpfLimpo}`);
 
-    // ─── 2) Buscar PDF do Storage ──────────────────────────────────
+    // ─── 2) Buscar PDF do Storage (prioridade: assinado > vencida > original) ──
     console.log('📄 Etapa 2: Buscando PDF do Storage...');
     const { data: termoRecord, error: errTermo } = await supabase
       .from('termos_assistencia')
-      .select('id, id_finalizacao, id_solicitacao, pdf_storage_path, pdf_bucket, enviado_sienge, data_envio_sienge, sienge_error')
+      .select('id, id_finalizacao, id_solicitacao, pdf_storage_path, pdf_storage_path_assinado, pdf_storage_path_vencida, pdf_bucket, enviado_sienge, data_envio_sienge, sienge_error')
       .eq('id_finalizacao', idFinalizacao)
       .maybeSingle();
 
-    if (errTermo || !termoRecord || !termoRecord.pdf_storage_path) {
-      console.error('❌ Termo/PDF não encontrado:', errTermo);
-      return c.json({ success: false, error: 'PDF do termo não encontrado. Salve o termo antes de enviar ao Sienge.' }, 404);
+    if (errTermo || !termoRecord) {
+      console.error('❌ Termo não encontrado:', errTermo);
+      return c.json({ success: false, error: 'Registro do termo não encontrado. Salve o termo antes de enviar ao Sienge.' }, 404);
     }
+
+    // Prioridade: PDF assinado (Clicksign) > PDF com carimbo vencida > PDF original
+    const pdfPathToUse = termoRecord.pdf_storage_path_assinado
+      || termoRecord.pdf_storage_path_vencida
+      || termoRecord.pdf_storage_path;
+
+    if (!pdfPathToUse) {
+      console.error('❌ Nenhum PDF disponível no registro');
+      return c.json({ success: false, error: 'PDF do termo não encontrado no Storage.' }, 404);
+    }
+
+    const pdfSource = termoRecord.pdf_storage_path_assinado
+      ? 'assinado (Clicksign)'
+      : termoRecord.pdf_storage_path_vencida
+        ? 'vencida (aceite tácito)'
+        : 'original';
+    console.log(`   📋 Usando PDF ${pdfSource}: ${pdfPathToUse}`);
 
     const bucket = termoRecord.pdf_bucket || BUCKET_TERMOS;
     const { data: pdfData, error: errDownload } = await supabase.storage
       .from(bucket)
-      .download(termoRecord.pdf_storage_path);
+      .download(pdfPathToUse);
 
     if (errDownload || !pdfData) {
       console.error('❌ Erro ao baixar PDF do Storage:', errDownload);
@@ -112,7 +129,7 @@ siengeRoutes.post("/assistencia-finalizada/:id/enviar-sienge", async (c) => {
     }
 
     const pdfBuffer = new Uint8Array(await pdfData.arrayBuffer());
-    const pdfFilename = termoRecord.pdf_storage_path.split('/').pop() || `termo-assistencia-${finalizacao.id_assistencia}.pdf`;
+    const pdfFilename = pdfPathToUse.split('/').pop() || `termo-assistencia-${finalizacao.id_assistencia}.pdf`;
     console.log(`   ✅ PDF baixado: ${pdfFilename} (${(pdfBuffer.length / 1024).toFixed(1)} KB)`);
 
     // ─── 3) SIENGE: Buscar cliente por CPF (tenta múltiplos formatos) ───

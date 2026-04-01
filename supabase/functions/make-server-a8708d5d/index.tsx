@@ -2063,32 +2063,62 @@ app.patch("/make-server-a8708d5d/assistencia-finalizada/:id/finalizar-vencida", 
       assinatura_vencida: true,
     };
     
-    // Salvar referência do PDF na tabela termos_assistencia
+    // Atualizar registro existente em termos_assistencia com o PDF da vencida (carimbo de aceitação tácita)
+    // O registro original já foi criado na finalização do chamado (fluxo Clicksign)
     let termoRecord: any = null;
     if (pdfPath) {
       try {
-        const { data: termoData, error: termoError } = await supabase
+        // Primeiro, tentar atualizar registro existente
+        const { data: existingTermo } = await supabase
           .from('termos_assistencia')
-          .upsert({
-            id_solicitacao: finalizacao.id_assistencia,
-            id_finalizacao: idFinalizacao,
-            pdf_storage_path: pdfPath,
-            pdf_bucket: BUCKET_TERMOS,
-          }, {
-            onConflict: 'id_solicitacao,id_finalizacao',
-          })
-          .select()
-          .single();
+          .select('id')
+          .eq('id_finalizacao', idFinalizacao)
+          .maybeSingle();
 
-        if (termoError) {
-          console.error('❌ Erro ao salvar registro na tabela termos_assistencia:', termoError);
-          // Não bloqueia a finalização, mas registra o erro
+        if (existingTermo) {
+          // Registro já existe — salvar PDF vencida no campo separado
+          const { data: termoData, error: termoError } = await supabase
+            .from('termos_assistencia')
+            .update({
+              pdf_storage_path_vencida: pdfPath,
+              tipo_finalizacao: 'vencida',
+              finalizado_em: new Date().toISOString(),
+            })
+            .eq('id', existingTermo.id)
+            .select()
+            .single();
+
+          if (termoError) {
+            console.error('❌ Erro ao atualizar termos_assistencia:', termoError);
+          } else {
+            termoRecord = termoData;
+            console.log(`✅ termos_assistencia atualizado: id=${termoData.id}, pdf_vencida=${pdfPath}`);
+          }
         } else {
-          termoRecord = termoData;
-          console.log(`✅ Registro salvo na tabela termos_assistencia: id=${termoData.id}, path=${pdfPath}`);
+          // Registro não existe (caso legado) — criar com ambos os campos
+          const { data: termoData, error: termoError } = await supabase
+            .from('termos_assistencia')
+            .insert({
+              id_solicitacao: finalizacao.id_assistencia,
+              id_finalizacao: idFinalizacao,
+              pdf_storage_path: pdfPath,
+              pdf_storage_path_vencida: pdfPath,
+              pdf_bucket: BUCKET_TERMOS,
+              tipo_finalizacao: 'vencida',
+              finalizado_em: new Date().toISOString(),
+            })
+            .select()
+            .single();
+
+          if (termoError) {
+            console.error('❌ Erro ao criar termos_assistencia:', termoError);
+          } else {
+            termoRecord = termoData;
+            console.log(`✅ termos_assistencia criado (legado): id=${termoData.id}, path=${pdfPath}`);
+          }
         }
       } catch (termoErr) {
-        console.error('❌ Erro inesperado ao inserir em termos_assistencia:', termoErr);
+        console.error('❌ Erro inesperado ao salvar em termos_assistencia:', termoErr);
       }
     }
 
@@ -2167,13 +2197,13 @@ app.get("/make-server-a8708d5d/assistencia-finalizada/:id/termo-pdf", async (c) 
     
     console.log(`📄 Buscando PDF do termo para finalização #${idFinalizacao}...`);
     
-    // Buscar o registro na tabela termos_assistencia (🔧 FIX v6: select específico)
+    // Buscar o registro na tabela termos_assistencia
     const { data: termoRecord, error: termoError } = await supabase
       .from('termos_assistencia')
-      .select('id, id_finalizacao, id_solicitacao, pdf_storage_path, pdf_bucket, enviado_sienge, data_envio_sienge')
+      .select('id, id_finalizacao, id_solicitacao, pdf_storage_path, pdf_storage_path_assinado, pdf_storage_path_vencida, pdf_bucket, enviado_sienge, data_envio_sienge')
       .eq('id_finalizacao', idFinalizacao)
       .maybeSingle();
-    
+
     if (termoError) {
       console.error('❌ Erro ao consultar termos_assistencia:', termoError);
       return c.json({ success: false, error: 'Erro ao consultar termo' }, 500);
@@ -2183,8 +2213,11 @@ app.get("/make-server-a8708d5d/assistencia-finalizada/:id/termo-pdf", async (c) 
       console.log(`ℹ️ Nenhum termo salvo para finalização #${idFinalizacao}`);
       return c.json({ success: false, error: 'Nenhum PDF associado a este termo' }, 404);
     }
-    
-    const pdfPath = termoRecord.pdf_storage_path;
+
+    // Prioridade: assinado (Clicksign) > vencida (carimbo) > original
+    const pdfPath = termoRecord.pdf_storage_path_assinado
+      || termoRecord.pdf_storage_path_vencida
+      || termoRecord.pdf_storage_path;
     const bucket = termoRecord.pdf_bucket || BUCKET_TERMOS;
     
     if (!pdfPath) {
@@ -3240,6 +3273,156 @@ app.onError((err, c) => {
     errorId: errorId,
     timestamp: new Date().toISOString(),
   }, statusCode);
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// 📄 ROTA PARA LISTAR TERMOS DE ASSISTÊNCIA TÉCNICA
+// Retorna termos com dados da assistência e cliente para a página de gestão
+// ═══════════════════════════════════════════════════════════════════
+
+app.get("/make-server-a8708d5d/termos-assistencia", async (c) => {
+  try {
+    const url = new URL(c.req.url);
+    const page = parseInt(url.searchParams.get('page') || '1');
+    const limit = parseInt(url.searchParams.get('limit') || '50');
+    const search = url.searchParams.get('search') || '';
+    const tipo = url.searchParams.get('tipo') || ''; // 'assinado', 'vencida', 'pendente' ou '' (todos)
+    const siengeStatus = url.searchParams.get('sienge') || ''; // 'ok', 'erro', ou '' (todos)
+    const empreendimento = url.searchParams.get('empreendimento') || '';
+    const offset = (page - 1) * limit;
+
+    console.log(`📄 Listando termos: page=${page}, limit=${limit}, search="${search}", tipo="${tipo}", sienge="${siengeStatus}", empreendimento="${empreendimento}"`);
+
+    // Query base com JOIN na finalização
+    let query = supabase
+      .from('termos_assistencia')
+      .select(`
+        id,
+        id_solicitacao,
+        id_finalizacao,
+        pdf_storage_path,
+        pdf_storage_path_assinado,
+        pdf_storage_path_vencida,
+        pdf_bucket,
+        tipo_finalizacao,
+        finalizado_em,
+        enviado_sienge,
+        data_envio_sienge,
+        sienge_error,
+        created_at,
+        updated_at,
+        assistencia_finalizada!id_finalizacao (
+          id,
+          id_assistencia,
+          status,
+          responsaveis,
+          nps,
+          assinatura_vencida,
+          created_at
+        )
+      `, { count: 'exact' });
+
+    // Filtro por tipo de finalização
+    if (tipo === 'assinado') {
+      query = query.eq('tipo_finalizacao', 'assinado');
+    } else if (tipo === 'vencida') {
+      query = query.eq('tipo_finalizacao', 'vencida');
+    } else if (tipo === 'pendente') {
+      query = query.is('tipo_finalizacao', null);
+    }
+
+    // Filtro por status do Sienge
+    if (siengeStatus === 'ok') {
+      query = query.eq('enviado_sienge', true);
+    } else if (siengeStatus === 'erro') {
+      query = query.eq('enviado_sienge', false).not('tipo_finalizacao', 'is', null);
+    }
+
+    // Ordenar por data de criação (mais recentes primeiro)
+    query = query.order('created_at', { ascending: false });
+
+    // Paginação
+    query = query.range(offset, offset + limit - 1);
+
+    const { data: termos, error, count } = await query;
+
+    if (error) {
+      console.error('❌ Erro ao buscar termos:', error);
+      return c.json({ success: false, error: error.message }, 500);
+    }
+
+    // Para cada termo, buscar dados do cliente via assistência
+    const termosComCliente = [];
+    for (const termo of (termos || [])) {
+      const fin = (termo as any).assistencia_finalizada;
+      let clienteInfo: any = null;
+
+      if (fin?.id_assistencia) {
+        const { data: assRaw } = await supabase
+          .from('Assistência Técnica')
+          .select('id, id_cliente, categoria_reparo, clientes!id_cliente(proprietario, cpf, telefone, email, bloco, unidade, empreendimento)')
+          .eq('id', fin.id_assistencia)
+          .single();
+
+        if (assRaw) {
+          const cl = (assRaw as any).clientes || {};
+          clienteInfo = {
+            proprietario: cl.proprietario,
+            cpf: cl.cpf,
+            telefone: cl.telefone,
+            email: cl.email,
+            bloco: cl.bloco,
+            unidade: cl.unidade,
+            empreendimento: cl.empreendimento,
+            categoria_reparo: assRaw.categoria_reparo,
+          };
+        }
+      }
+
+      // Aplicar filtros de search e empreendimento no JS (após busca)
+      if (empreendimento && clienteInfo?.empreendimento !== empreendimento) continue;
+      if (search) {
+        const s = search.toLowerCase();
+        const match =
+          clienteInfo?.proprietario?.toLowerCase().includes(s) ||
+          clienteInfo?.cpf?.includes(s) ||
+          clienteInfo?.empreendimento?.toLowerCase().includes(s) ||
+          String(termo.id_solicitacao).includes(s) ||
+          String(termo.id_finalizacao).includes(s);
+        if (!match) continue;
+      }
+
+      termosComCliente.push({
+        ...termo,
+        assistencia_finalizada: undefined,
+        finalizacao: fin ? {
+          id: fin.id,
+          id_assistencia: fin.id_assistencia,
+          status: fin.status,
+          responsaveis: fin.responsaveis,
+          nps: fin.nps,
+          assinatura_vencida: fin.assinatura_vencida,
+          created_at: fin.created_at,
+        } : null,
+        cliente: clienteInfo,
+      });
+    }
+
+    const totalPages = count ? Math.ceil(count / limit) : 1;
+
+    return c.json({
+      success: true,
+      data: termosComCliente,
+      total: count || 0,
+      page,
+      limit,
+      totalPages,
+    });
+
+  } catch (error) {
+    console.error('❌ Erro geral ao listar termos:', error);
+    return c.json({ success: false, error: String(error) }, 500);
+  }
 });
 
 // ═══════════════════════════════════════════════════════════════════

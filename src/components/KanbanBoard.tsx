@@ -1612,7 +1612,7 @@ const KanbanCard = memo(function KanbanCard(props: KanbanCardProps) {
       return false;
     });
 
-    if (responsaveis.length === 0 || !itensValidos || !providencias.trim() || !fotoReparo || !nps) {
+    if (responsaveis.length === 0 || !itensValidos || !providencias.trim() || !fotoReparo) {
       toast.error('Por favor, preencha todos os campos obrigatórios');
       return;
     }
@@ -2980,35 +2980,7 @@ const KanbanCard = memo(function KanbanCard(props: KanbanCardProps) {
                     )}
                   </div>
 
-                  {/* 5. Avaliação do Atendimento (NPS) */}
-                  <div className="space-y-2.5">
-                    <Label className="text-sm font-medium text-[var(--foreground)] flex items-center gap-1.5">
-                      <Sparkles className="h-4 w-4 text-[var(--muted-foreground)]" />
-                      Nota do Atendimento (1 a 10)
-                      <span className="text-[var(--error)]">*</span>
-                    </Label>
-                    <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((nota) => (
-                        <button
-                          key={nota}
-                          type="button"
-                          onClick={() => setNps(nota)}
-                          className={`h-11 rounded-lg font-semibold text-sm transition-all ${
-                            nps === nota
-                              ? 'bg-black text-white shadow-md scale-105'
-                              : 'bg-[var(--background-secondary)] text-[var(--foreground)] hover:bg-[var(--border)] hover:scale-105'
-                          }`}
-                        >
-                          {nota}
-                        </button>
-                      ))}
-                    </div>
-                    {nps && (
-                      <p className="text-center text-sm font-medium text-[var(--success)]">
-                        ✓ Nota selecionada: {nps}
-                      </p>
-                    )}
-                  </div>
+                  {/* NPS removido — coletado via fluxo de avaliação pós-assinatura */}
                 </div>
               </div>
             </div>
@@ -3035,8 +3007,7 @@ const KanbanCard = memo(function KanbanCard(props: KanbanCardProps) {
                   return false;
                 }) || 
                 !providencias.trim() || 
-                !fotoReparo ||
-                !nps
+                !fotoReparo
               }
               className="bg-black hover:bg-[var(--primary-hover)] text-white px-5 rounded-lg shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
             >

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import {
   Wrench, Menu, X, ChevronLeft, LogOut, Users,
-  FolderOpen, LayoutDashboard, MessageCircle, Sparkles, UserCircle
+  FolderOpen, LayoutDashboard, MessageCircle, Sparkles, UserCircle, FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useRouter, usePathname } from 'next/navigation';
@@ -76,6 +76,12 @@ export function Sidebar({ onWidthChange }: SidebarProps) {
       icon: UserCircle,
       label: 'Clientes',
       visible: userData?.menu_cadastro === true,
+    },
+    {
+      id: 'termos-assistencia',
+      icon: FileText,
+      label: 'Termos',
+      visible: userData?.menu_assistencia === true,
     },
     {
       id: 'gerenciamento',

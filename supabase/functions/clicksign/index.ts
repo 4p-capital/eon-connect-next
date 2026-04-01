@@ -14,6 +14,7 @@ const CLICKSIGN_BASE = Deno.env.get("CLICKSIGN_BASE_URL") || "https://sandbox.cl
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const BUCKET_TERMOS = "make-a8708d5d-termos-assistencia";
 
 // Z-API WhatsApp
 const ZAPI_BASE_URL = Deno.env.get("ZAPI_URL") || "https://api.z-api.io";
@@ -395,6 +396,54 @@ async function handleSendEnvelope(req: Request): Promise<Response> {
         .update({ status: "Aguardando assinatura" })
         .eq("id", id_finalizacao);
       console.log(`✅ Status atualizado na finalização #${id_finalizacao}`);
+
+      // 9️⃣ Salvar PDF no Supabase Storage + registrar em termos_assistencia
+      try {
+        const pdfFilename = filename || `termo-assistencia-${id_assistencia}.pdf`;
+        const pdfPath = `finalizacao-${id_finalizacao}/${pdfFilename}`;
+
+        // Decodificar base64 para Uint8Array
+        const binaryString = atob(pdf_base64);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+
+        const { error: uploadError } = await supabase.storage
+          .from(BUCKET_TERMOS)
+          .upload(pdfPath, bytes, {
+            contentType: "application/pdf",
+            upsert: true,
+          });
+
+        if (uploadError) {
+          console.error("⚠️ Erro ao salvar PDF no Storage (não bloqueia envio):", uploadError.message);
+        } else {
+          console.log(`✅ PDF salvo no Storage: ${pdfPath}`);
+
+          // Registrar na tabela termos_assistencia
+          const { error: termoError } = await supabase
+            .from("termos_assistencia")
+            .upsert(
+              {
+                id_solicitacao: id_assistencia,
+                id_finalizacao: id_finalizacao,
+                pdf_storage_path: pdfPath,
+                pdf_bucket: BUCKET_TERMOS,
+              },
+              { onConflict: "id_solicitacao,id_finalizacao" }
+            );
+
+          if (termoError) {
+            console.error("⚠️ Erro ao registrar em termos_assistencia:", termoError.message);
+          } else {
+            console.log(`✅ Registro salvo em termos_assistencia: path=${pdfPath}`);
+          }
+        }
+      } catch (storageErr) {
+        console.error("⚠️ Erro inesperado ao armazenar PDF:", storageErr);
+        // Não bloqueia o fluxo — o envio ao Clicksign já foi realizado com sucesso
+      }
     }
 
     return new Response(
@@ -506,6 +555,18 @@ async function handleWebhook(req: Request): Promise<Response> {
       // Assinatura completada
       console.log(`✅ Documento assinado! Finalizando assistência #${finalizacao.id_assistencia}`);
 
+      // Idempotência: ignorar se já processou sign ou document_closed
+      const { data: signCheck } = await supabase
+        .from("clicksign_envelopes")
+        .select("webhook_event")
+        .eq("envelope_id", envelopeId)
+        .single();
+
+      if (signCheck?.webhook_event === "sign" || signCheck?.webhook_event === "document_closed") {
+        console.log(`ℹ️ Webhook ${signCheck.webhook_event} já processado para envelope ${envelopeId}, ignorando`);
+        break;
+      }
+
       // Atualizar assistencia_finalizada
       await supabase
         .from("assistencia_finalizada")
@@ -580,13 +641,25 @@ async function handleWebhook(req: Request): Promise<Response> {
       // Documento assinado e fechado (pronto para download)
       console.log(`✅ Documento fechado (assinado)! Finalizando assistência #${finalizacao.id_assistencia}`);
 
+      // Idempotência: verificar se este webhook já foi processado
+      const { data: envelopeCheck } = await supabase
+        .from("clicksign_envelopes")
+        .select("webhook_event")
+        .eq("envelope_id", envelopeId)
+        .single();
+
+      if (envelopeCheck?.webhook_event === "document_closed") {
+        console.log(`ℹ️ Webhook document_closed já processado para envelope ${envelopeId}, ignorando duplicata`);
+        break;
+      }
+
       // Atualizar assistencia_finalizada
       await supabase
         .from("assistencia_finalizada")
         .update({ status: "Finalizado" })
         .eq("id", finalizacao.id);
 
-      // Atualizar clicksign_envelopes
+      // Atualizar clicksign_envelopes (signed_document_url é preenchido após download abaixo)
       await supabase
         .from("clicksign_envelopes")
         .update({ envelope_status: "closed", webhook_event: "document_closed", signed_at: now })
@@ -603,8 +676,165 @@ async function handleWebhook(req: Request): Promise<Response> {
 
       console.log(`✅ Assistência #${finalizacao.id_assistencia} finalizada via document_closed`);
 
-      // Criar avaliação NPS e enviar link via WhatsApp
+      // Baixar PDF assinado do Clicksign e salvar no Storage
+      let pdfAssinadoPath: string | null = null;
       try {
+        console.log(`📥 Baixando PDF assinado do Clicksign (envelope=${envelopeId}, doc=${envelope.document_id})...`);
+
+        // Buscar detalhes do documento para obter URL do PDF assinado
+        const docDetails = await clicksignRequest(
+          `/envelopes/${envelopeId}/documents/${envelope.document_id}`,
+          "GET"
+        );
+
+        // Log completo para debug dos campos disponíveis
+        const filesObj = docDetails?.data?.links?.files;
+        console.log(`📋 Clicksign files disponíveis:`, JSON.stringify(filesObj));
+
+        // Prioridade: signed > original (v3 pode retornar "signed" quando documento está closed)
+        const pdfUrl = filesObj?.signed || filesObj?.original;
+        if (pdfUrl) {
+          // Baixar o PDF
+          const pdfResp = await fetch(pdfUrl);
+          if (pdfResp.ok) {
+            const pdfBuffer = new Uint8Array(await pdfResp.arrayBuffer());
+            pdfAssinadoPath = `finalizacao-${finalizacao.id}/termo-assinado-${finalizacao.id_assistencia}.pdf`;
+
+            const { error: uploadErr } = await supabase.storage
+              .from(BUCKET_TERMOS)
+              .upload(pdfAssinadoPath, pdfBuffer, {
+                contentType: "application/pdf",
+                upsert: true,
+              });
+
+            if (uploadErr) {
+              console.error("⚠️ Erro ao salvar PDF assinado no Storage:", uploadErr.message);
+              pdfAssinadoPath = null;
+            } else {
+              console.log(`✅ PDF assinado salvo: ${pdfAssinadoPath} (${(pdfBuffer.length / 1024).toFixed(1)} KB)`);
+            }
+          } else {
+            console.error(`⚠️ Erro ao baixar PDF do Clicksign: HTTP ${pdfResp.status}`);
+          }
+        } else {
+          console.warn("⚠️ URL do PDF não encontrada via API v3, tentando API v1...");
+
+          // Fallback: API v1 tem downloads.signed_file_url
+          try {
+            const v1Base = CLICKSIGN_BASE.replace("/api/v3", "/api/v1");
+            const v1Url = `${v1Base}/documents/${envelope.document_id}?access_token=${CLICKSIGN_TOKEN}`;
+            const v1Resp = await fetch(v1Url, {
+              headers: { Accept: "application/json" },
+            });
+
+            if (v1Resp.ok) {
+              const v1Data = await v1Resp.json();
+              const signedUrl = v1Data?.document?.downloads?.signed_file_url;
+              console.log(`📋 Clicksign v1 downloads:`, JSON.stringify(v1Data?.document?.downloads));
+
+              if (signedUrl) {
+                const pdfResp2 = await fetch(signedUrl);
+                if (pdfResp2.ok) {
+                  const pdfBuffer2 = new Uint8Array(await pdfResp2.arrayBuffer());
+                  pdfAssinadoPath = `finalizacao-${finalizacao.id}/termo-assinado-${finalizacao.id_assistencia}.pdf`;
+
+                  const { error: uploadErr2 } = await supabase.storage
+                    .from(BUCKET_TERMOS)
+                    .upload(pdfAssinadoPath, pdfBuffer2, {
+                      contentType: "application/pdf",
+                      upsert: true,
+                    });
+
+                  if (uploadErr2) {
+                    console.error("⚠️ Erro ao salvar PDF assinado (v1) no Storage:", uploadErr2.message);
+                    pdfAssinadoPath = null;
+                  } else {
+                    console.log(`✅ PDF assinado salvo via API v1: ${pdfAssinadoPath} (${(pdfBuffer2.length / 1024).toFixed(1)} KB)`);
+                  }
+                }
+              } else {
+                console.warn("⚠️ signed_file_url não disponível na API v1 (documento pode não estar finalizado ainda)");
+              }
+            }
+          } catch (v1Err) {
+            console.error("⚠️ Fallback API v1 falhou:", v1Err);
+          }
+        }
+      } catch (dlErr) {
+        console.error("⚠️ Erro ao baixar PDF assinado (não bloqueia fluxo):", dlErr);
+      }
+
+      // Atualizar signed_document_url na clicksign_envelopes
+      if (pdfAssinadoPath) {
+        await supabase
+          .from("clicksign_envelopes")
+          .update({ signed_document_url: pdfAssinadoPath })
+          .eq("envelope_id", envelopeId);
+        console.log(`✅ clicksign_envelopes.signed_document_url atualizado: ${pdfAssinadoPath}`);
+      }
+
+      // Marcar termo como assinado pelo cliente + salvar path do PDF assinado
+      try {
+        const termoUpdate: Record<string, unknown> = {
+          tipo_finalizacao: "assinado",
+          finalizado_em: now,
+        };
+        if (pdfAssinadoPath) {
+          termoUpdate.pdf_storage_path_assinado = pdfAssinadoPath;
+        }
+
+        const { error: termoUpdateErr } = await supabase
+          .from("termos_assistencia")
+          .update(termoUpdate)
+          .eq("id_finalizacao", finalizacao.id);
+
+        if (termoUpdateErr) {
+          console.error("⚠️ Erro ao atualizar termos_assistencia:", termoUpdateErr.message);
+        } else {
+          console.log(`✅ termos_assistencia marcado como 'assinado'${pdfAssinadoPath ? ' + PDF assinado salvo' : ''}`);
+        }
+      } catch (termoErr) {
+        console.error("⚠️ Erro inesperado ao atualizar termo:", termoErr);
+      }
+
+      // Enviar termo ao Sienge (ERP) — mesma rota usada no fluxo de assinatura vencida
+      try {
+        const siengeUrl = `${SUPABASE_URL}/functions/v1/make-server-a8708d5d/assistencia-finalizada/${finalizacao.id}/enviar-sienge`;
+        console.log(`🏢 Enviando termo ao Sienge para finalização #${finalizacao.id}...`);
+
+        const siengeResp = await fetch(siengeUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}`,
+          },
+        });
+
+        const siengeData = await siengeResp.json().catch(() => ({}));
+
+        if (siengeResp.ok && siengeData.success) {
+          console.log(`✅ Termo enviado ao Sienge com sucesso!`, JSON.stringify(siengeData.data || {}));
+        } else {
+          console.error(`⚠️ Sienge retornou erro (não bloqueia fluxo):`, JSON.stringify(siengeData));
+        }
+      } catch (siengeErr) {
+        console.error("⚠️ Erro ao chamar Sienge (não bloqueia fluxo):", siengeErr);
+      }
+
+      // Criar avaliação NPS e enviar link via WhatsApp (com proteção contra duplicata)
+      try {
+        // Verificar se já existe avaliação NPS para esta finalização
+        const { data: existingNps } = await supabase
+          .from("avaliacoes_nps")
+          .select("id")
+          .eq("assistencia_finalizada_id", finalizacao.id)
+          .maybeSingle();
+
+        if (existingNps) {
+          console.log(`ℹ️ Avaliação NPS já existe para finalização #${finalizacao.id}, pulando criação`);
+          break;
+        }
+
         const { data: avaliacaoData } = await supabase
           .from("avaliacoes_nps")
           .insert({
