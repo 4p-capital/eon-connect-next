@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { TrendingUp, BarChart3, PieChart as PieChartIcon, Building2, Package, Users, Star, AlertCircle, Calendar, Filter, X, ClipboardList, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { projectId, publicAnonKey } from '@/utils/supabase/info';
-import { AIInsights } from '@/components/AIInsights';
 
 const CORES_GRAFICO = [
   '#3B82F6', '#111111', '#10B981', '#F59E0B',
@@ -822,8 +821,6 @@ export function DashboardAssistencia() {
           )}
         </div>
 
-        {/* Insights de IA */}
-        <AIInsights />
       </div>
     </div>
   );
