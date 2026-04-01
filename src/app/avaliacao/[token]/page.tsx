@@ -177,27 +177,38 @@ export default function AvaliacaoPage() {
               Ola, {primeiroNome}.
             </h1>
             <p className="text-sm text-gray-400 mt-1.5 leading-relaxed">
-              Seu reparo foi finalizado{dataFinalizado ? ` em ${dataFinalizado}` : ''}. Gostaríamos de saber sua opinião.
+              Seu reparo foi finalizado. Gostaríamos de saber sua opinião.
             </p>
           </div>
 
           {/* Resumo do chamado */}
-          <div className="border border-gray-100 rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
+          <div className="flex gap-3 py-3 border-y border-gray-100">
+            <div className="w-1 bg-black rounded-full flex-shrink-0" />
+            <div className="flex-1 space-y-2.5">
               <p className="text-[11px] text-gray-400 font-medium uppercase tracking-wide">Chamado #{dados?.id_assistencia}</p>
-              <span className="text-[11px] text-gray-900 font-semibold bg-gray-100 px-2 py-0.5 rounded-md">
-                {dados?.assistencia?.categoria_reparo || 'Assistencia'}
-              </span>
-            </div>
-            {dados?.assistencia?.descricao_cliente && (
-              <p className="text-sm text-gray-600 leading-relaxed">{dados.assistencia.descricao_cliente}</p>
-            )}
-            {responsaveisStr && (
-              <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                <span className="text-xs text-gray-400">Responsavel</span>
-                <span className="text-xs text-gray-900 font-semibold">{responsaveisStr}</span>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-400">Categoria</span>
+                <span className="text-xs text-gray-900 font-semibold">{dados?.assistencia?.categoria_reparo || 'Assistencia'}</span>
               </div>
-            )}
+              {responsaveisStr && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400">Responsavel</span>
+                  <span className="text-xs text-gray-900 font-semibold">{responsaveisStr}</span>
+                </div>
+              )}
+              {dataFinalizado && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400">Finalizado em</span>
+                  <span className="text-xs text-gray-900 font-semibold">{dataFinalizado}</span>
+                </div>
+              )}
+              {dados?.assistencia?.descricao_cliente && (
+                <div>
+                  <span className="text-xs text-gray-400">Descricao</span>
+                  <p className="text-sm text-gray-600 mt-0.5 leading-relaxed">{dados.assistencia.descricao_cliente}</p>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Pergunta + Notas */}
