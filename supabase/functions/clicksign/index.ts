@@ -535,7 +535,7 @@ async function handleWebhook(req: Request): Promise<Response> {
   // Buscar a finalização associada
   const { data: finalizacao } = await supabase
     .from("assistencia_finalizada")
-    .select("id, id_assistencia, status")
+    .select("id, id_assistencia, status, responsaveis")
     .eq("id", envelope.assistencia_finalizada_id)
     .single();
 
@@ -840,6 +840,7 @@ async function handleWebhook(req: Request): Promise<Response> {
           .insert({
             assistencia_finalizada_id: finalizacao.id,
             id_assistencia: finalizacao.id_assistencia,
+            responsaveis: finalizacao.responsaveis || null,
           })
           .select("token")
           .single();
