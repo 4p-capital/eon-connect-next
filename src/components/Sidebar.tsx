@@ -2,14 +2,29 @@
 
 import { useState, useEffect } from 'react';
 import {
-  Wrench, Menu, X, ChevronLeft, LogOut, Users,
-  FolderOpen, LayoutDashboard, MessageCircle, Sparkles, UserCircle, FileText
+  Wrench, Menu, X, ChevronLeft, ChevronDown, LogOut, Users,
+  FolderOpen, LayoutDashboard, MessageCircle, Sparkles, UserCircle, FileText, Bell, Users2, List,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useRouter, usePathname } from 'next/navigation';
 import eonLogo from '@/assets/0d61051e7e3d9184d675cfec8b0341c5383f7b2a.png';
 import { useUser } from '@/contexts/UserContext';
 import { useAuth } from '@/contexts/AuthContext';
+import type { LucideIcon } from 'lucide-react';
+
+interface SubMenuItem {
+  id: string;
+  icon: LucideIcon;
+  label: string;
+}
+
+interface MenuItem {
+  id: string;
+  icon: LucideIcon;
+  label: string;
+  visible: boolean;
+  children?: SubMenuItem[];
+}
 
 interface SidebarProps {
   onWidthChange?: (width: number) => void;
@@ -18,16 +33,28 @@ interface SidebarProps {
 export function Sidebar({ onWidthChange }: SidebarProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
   const { userData, loading } = useUser();
   const { logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
-  // Derivar currentRoute do pathname
   const currentRoute = (() => {
     if (pathname === '/') return 'home';
-    return pathname.substring(1); // Remove leading '/'
+    return pathname.substring(1);
   })();
+
+  // Auto-expand parent menu when a child route is active
+  useEffect(() => {
+    menuItems.forEach((item) => {
+      if (item.children) {
+        const hasActiveChild = item.children.some((child) => currentRoute === child.id);
+        if (hasActiveChild && !expandedMenus.includes(item.id)) {
+          setExpandedMenus((prev) => [...prev, item.id]);
+        }
+      }
+    });
+  }, [currentRoute]);
 
   useEffect(() => {
     if (onWidthChange) {
@@ -46,7 +73,13 @@ export function Sidebar({ onWidthChange }: SidebarProps) {
     setIsMobileOpen(false);
   };
 
-  const menuItems = [
+  const toggleSubmenu = (id: string) => {
+    setExpandedMenus((prev) =>
+      prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]
+    );
+  };
+
+  const menuItems: MenuItem[] = [
     {
       id: 'home',
       icon: LayoutDashboard,
@@ -54,34 +87,63 @@ export function Sidebar({ onWidthChange }: SidebarProps) {
       visible: true,
     },
     {
-      id: 'gerenciamento-assistencia',
+      id: 'assistencia',
       icon: Wrench,
       label: 'Assistência',
       visible: userData?.menu_assistencia === true,
+      children: [
+        {
+          id: 'gerenciamento-assistencia',
+          icon: Wrench,
+          label: 'Gerenciar',
+        },
+        {
+          id: 'whatsapp-chats',
+          icon: MessageCircle,
+          label: 'WhatsApp',
+        },
+        {
+          id: 'termos-assistencia',
+          icon: FileText,
+          label: 'Termos',
+        },
+      ],
     },
     {
-      id: 'whatsapp-chats',
-      icon: MessageCircle,
-      label: 'WhatsApp',
-      visible: userData?.menu_assistencia === true,
-    },
-    {
-      id: 'cadastros',
+      id: 'gestao',
       icon: FolderOpen,
       label: 'Cadastros',
       visible: userData?.menu_cadastro === true,
+      children: [
+        {
+          id: 'cadastros',
+          icon: FolderOpen,
+          label: 'Cadastros',
+        },
+        {
+          id: 'clientes',
+          icon: UserCircle,
+          label: 'Clientes',
+        },
+      ],
     },
     {
-      id: 'clientes',
-      icon: UserCircle,
-      label: 'Clientes',
-      visible: userData?.menu_cadastro === true,
-    },
-    {
-      id: 'termos-assistencia',
-      icon: FileText,
-      label: 'Termos',
-      visible: userData?.menu_assistencia === true,
+      id: 'notificacoes-fornecedor',
+      icon: Bell,
+      label: 'Notificações',
+      visible: true,
+      children: [
+        {
+          id: 'notificacoes-fornecedor',
+          icon: List,
+          label: 'Pedidos',
+        },
+        {
+          id: 'notificacoes-fornecedor/grupos',
+          icon: Users2,
+          label: 'Cadastro de Grupos',
+        },
+      ],
     },
     {
       id: 'gerenciamento',
@@ -90,6 +152,108 @@ export function Sidebar({ onWidthChange }: SidebarProps) {
       visible: userData?.menu_gerenciamento === true,
     },
   ].filter(item => item.visible);
+
+  const isRouteActive = (id: string) => currentRoute === id;
+
+  const isParentActive = (item: MenuItem) => {
+    if (item.children) {
+      return item.children.some((child) => currentRoute === child.id) || currentRoute === item.id;
+    }
+    return currentRoute === item.id;
+  };
+
+  // ── Render menu item (shared between desktop & mobile) ──
+
+  const renderMenuItem = (item: MenuItem, isMobile: boolean) => {
+    const Icon = item.icon;
+    const hasChildren = item.children && item.children.length > 0;
+    const isOpen = expandedMenus.includes(item.id);
+    const isActive = !hasChildren && isRouteActive(item.id);
+    const isParent = hasChildren && isParentActive(item);
+
+    return (
+      <div key={item.id}>
+        <button
+          onClick={() => {
+            if (hasChildren) {
+              if (!isExpanded && !isMobile) {
+                setIsExpanded(true);
+                if (!isOpen) toggleSubmenu(item.id);
+              } else {
+                toggleSubmenu(item.id);
+              }
+            } else {
+              handleNavigate(item.id);
+            }
+          }}
+          title={!isExpanded && !isMobile ? item.label : undefined}
+          className={`group relative w-full flex items-center ${
+            isExpanded || isMobile ? 'px-3' : 'justify-center px-0'
+          } py-2.5 text-sm font-medium transition-all rounded-lg
+          ${isActive || isParent
+            ? 'bg-gray-100 text-gray-900'
+            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+          }`}
+        >
+          {(isActive || isParent) && (
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 bg-black rounded-r-full" />
+          )}
+
+          <Icon className={`h-5 w-5 flex-shrink-0 transition-colors ${
+            isActive || isParent ? 'text-black' : 'text-gray-500 group-hover:text-gray-700'
+          }`} />
+
+          {(isExpanded || isMobile) && (
+            <>
+              <span className="ml-3 whitespace-nowrap overflow-hidden flex-1 text-left">
+                {item.label}
+              </span>
+              {hasChildren && (
+                <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+              )}
+            </>
+          )}
+        </button>
+
+        {/* Submenu */}
+        {hasChildren && (isExpanded || isMobile) && (
+          <AnimatePresence>
+            {isOpen && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="ml-4 pl-4 border-l border-gray-200 mt-1 space-y-0.5">
+                  {item.children!.map((child) => {
+                    const ChildIcon = child.icon;
+                    const isChildActive = isRouteActive(child.id);
+
+                    return (
+                      <button
+                        key={child.id}
+                        onClick={() => handleNavigate(child.id)}
+                        className={`group relative w-full flex items-center gap-3 px-3 py-2 text-sm font-medium transition-all rounded-lg
+                        ${isChildActive
+                          ? 'text-gray-900 bg-gray-100'
+                          : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                        }`}
+                      >
+                        <ChildIcon className={`h-4 w-4 flex-shrink-0 ${isChildActive ? 'text-black' : 'text-gray-400 group-hover:text-gray-600'}`} />
+                        <span>{child.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        )}
+      </div>
+    );
+  };
 
   if (loading) {
     return (
@@ -101,7 +265,7 @@ export function Sidebar({ onWidthChange }: SidebarProps) {
 
   return (
     <>
-      {/* Mobile Menu Button - Minimalist */}
+      {/* Mobile Menu Button */}
       <button
         onClick={() => setIsMobileOpen(!isMobileOpen)}
         className="md:hidden fixed top-4 left-4 z-50 p-2 bg-white rounded-lg shadow-sm border border-gray-200 text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors"
@@ -142,38 +306,14 @@ export function Sidebar({ onWidthChange }: SidebarProps) {
             aria-label="Menu principal"
             className="md:hidden fixed top-0 left-0 bottom-0 w-80 bg-white z-50 flex flex-col shadow-xl"
           >
-            {/* Mobile Header */}
             <div className="h-16 flex items-center px-6 border-b border-gray-200">
               <img src={typeof eonLogo === "string" ? eonLogo : eonLogo.src} alt="EON" className="h-8" />
             </div>
 
-            {/* Mobile Menu Items */}
             <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-              {menuItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = currentRoute === item.id;
-
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => handleNavigate(item.id)}
-                    className={`relative w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition-all rounded-lg
-                      ${isActive
-                        ? 'text-gray-900 bg-gray-100'
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                      }`}
-                  >
-                    {isActive && (
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 h-8 w-1 bg-black rounded-r-full" />
-                    )}
-                    <Icon className={`h-5 w-5 ${isActive ? 'text-black' : 'text-gray-500 group-hover:text-gray-900'}`} />
-                    <span>{item.label}</span>
-                  </button>
-                );
-              })}
+              {menuItems.map((item) => renderMenuItem(item, true))}
             </nav>
 
-            {/* Mobile Footer */}
             <div className="p-4 border-t border-gray-200">
               <button
                 onClick={() => handleNavigate('logout')}
@@ -187,7 +327,7 @@ export function Sidebar({ onWidthChange }: SidebarProps) {
         )}
       </AnimatePresence>
 
-      {/* Desktop Sidebar - Minimalist */}
+      {/* Desktop Sidebar */}
       <motion.aside
         initial={false}
         animate={{ width: isExpanded ? 280 : 80 }}
@@ -196,7 +336,6 @@ export function Sidebar({ onWidthChange }: SidebarProps) {
         aria-label="Menu principal"
         className="hidden md:flex fixed top-0 left-0 bottom-0 bg-white border-r border-gray-200 z-40 flex-col"
       >
-        {/* Desktop Header */}
         <div className="h-16 flex items-center justify-center border-b border-gray-200 relative">
           <AnimatePresence mode="wait">
             {isExpanded ? (
@@ -222,7 +361,6 @@ export function Sidebar({ onWidthChange }: SidebarProps) {
             )}
           </AnimatePresence>
 
-          {/* Toggle Button */}
           <button
             onClick={() => setIsExpanded(!isExpanded)}
             className="absolute -right-4 top-20 w-8 h-8 bg-black rounded-full shadow-md flex items-center justify-center text-white hover:bg-gray-800 transition-all z-50"
@@ -232,49 +370,10 @@ export function Sidebar({ onWidthChange }: SidebarProps) {
           </button>
         </div>
 
-        {/* Desktop Menu Items */}
         <nav className="flex-1 py-6 px-3 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-200">
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = currentRoute === item.id;
-
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleNavigate(item.id)}
-                title={!isExpanded ? item.label : undefined}
-                className={`group relative w-full flex items-center ${
-                  isExpanded ? 'px-3' : 'justify-center px-0'
-                } py-2.5 text-sm font-medium transition-all rounded-lg
-                ${isActive
-                  ? 'bg-gray-100 text-gray-900'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-              >
-                {isActive && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 bg-black rounded-r-full" />
-                )}
-
-                <Icon className={`h-5 w-5 flex-shrink-0 transition-colors ${
-                  isActive ? 'text-black' : 'text-gray-500 group-hover:text-gray-700'
-                }`} />
-
-                {isExpanded && (
-                  <motion.span
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="ml-3 whitespace-nowrap overflow-hidden"
-                  >
-                    {item.label}
-                  </motion.span>
-                )}
-              </button>
-            );
-          })}
+          {menuItems.map((item) => renderMenuItem(item, false))}
         </nav>
 
-        {/* Desktop Footer */}
         <div className="p-3 border-t border-gray-200">
           <button
             onClick={() => handleNavigate('logout')}
