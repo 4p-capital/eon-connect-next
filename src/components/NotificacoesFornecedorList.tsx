@@ -58,8 +58,8 @@ export function NotificacoesFornecedorList() {
       const from = (page - 1) * limit;
       const to = from + limit - 1;
 
-      let query = supabase
-        .from("eventos_pedidos_aprovados")
+      let query = (supabase
+        .from("eventos_pedidos_aprovados") as any)
         .select("*", { count: "exact" });
 
       if (debouncedSearch) {

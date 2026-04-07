@@ -49,8 +49,8 @@ export function GruposNotificacaoList() {
     setLoading(true);
     try {
       const supabase = getSupabaseComprasClient();
-      let query = supabase
-        .from("grupos_notificacao")
+      let query = (supabase
+        .from("grupos_notificacao") as any)
         .select("*")
         .order("centro_custo", { ascending: true });
 
@@ -102,8 +102,8 @@ export function GruposNotificacaoList() {
       const supabase = getSupabaseComprasClient();
 
       if (editingId) {
-        const { error } = await supabase
-          .from("grupos_notificacao")
+        const { error } = await (supabase
+          .from("grupos_notificacao") as any)
           .update({
             nome_grupo: formNome.trim(),
             centro_custo: formCentroCusto.trim(),
@@ -113,7 +113,7 @@ export function GruposNotificacaoList() {
         if (error) throw error;
         toast.success("Grupo atualizado");
       } else {
-        const { error } = await supabase.from("grupos_notificacao").insert({
+        const { error } = await (supabase.from("grupos_notificacao") as any).insert({
           nome_grupo: formNome.trim(),
           centro_custo: formCentroCusto.trim(),
           contato: formContato.trim(),
@@ -136,8 +136,8 @@ export function GruposNotificacaoList() {
     setDeleting(id);
     try {
       const supabase = getSupabaseComprasClient();
-      const { error } = await supabase
-        .from("grupos_notificacao")
+      const { error } = await (supabase
+        .from("grupos_notificacao") as any)
         .delete()
         .eq("id", id);
       if (error) throw error;
