@@ -12,6 +12,8 @@ import {
   Phone,
   Edit2,
   Check,
+  Power,
+  PowerOff,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { getSupabaseComprasClient } from "@/utils/supabase-compras/client";
@@ -20,8 +22,9 @@ import { toast } from "sonner";
 interface GrupoNotificacao {
   id: string;
   nome_grupo: string;
-  centro_custo: string;
+  centros_custo: string[];
   contato: string;
+  ativo: boolean;
   created_at: string;
 }
 
@@ -37,13 +40,64 @@ export function GruposNotificacaoList() {
 
   // Form fields
   const [formNome, setFormNome] = useState("");
-  const [formCentroCusto, setFormCentroCusto] = useState("");
+  const [formCentrosCusto, setFormCentrosCusto] = useState<string[]>([]);
+  const [formCentroCustoInput, setFormCentroCustoInput] = useState("");
   const [formContato, setFormContato] = useState("");
+
+  // Configurações globais
+  const [notificarFornecedor, setNotificarFornecedor] = useState(true);
+  const [notificarGrupo, setNotificarGrupo] = useState(true);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 400);
     return () => clearTimeout(timer);
   }, [search]);
+
+  // Buscar configurações globais
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const supabase = getSupabaseComprasClient();
+        const { data } = await (supabase
+          .from("configuracoes_notificacao") as any)
+          .select("notificar_fornecedor, notificar_grupo")
+          .eq("id", 1)
+          .single();
+        if (data) {
+          setNotificarFornecedor(data.notificar_fornecedor);
+          setNotificarGrupo(data.notificar_grupo);
+        }
+      } catch (err) {
+        console.error("Erro ao buscar config:", err);
+      }
+    };
+    fetchConfig();
+  }, []);
+
+  const updateConfig = async (
+    field: "notificar_fornecedor" | "notificar_grupo",
+    value: boolean
+  ) => {
+    if (field === "notificar_fornecedor") setNotificarFornecedor(value);
+    else setNotificarGrupo(value);
+
+    try {
+      const supabase = getSupabaseComprasClient();
+      const { error } = await (supabase
+        .from("configuracoes_notificacao") as any)
+        .update({ [field]: value, updated_at: new Date().toISOString() })
+        .eq("id", 1);
+      if (error) throw error;
+      toast.success(
+        `${field === "notificar_fornecedor" ? "Fornecedor" : "Grupo"}: notificação ${value ? "ativada" : "desativada"}`
+      );
+    } catch (err) {
+      console.error("Erro ao atualizar config:", err);
+      toast.error("Erro ao atualizar configuração");
+      if (field === "notificar_fornecedor") setNotificarFornecedor(!value);
+      else setNotificarGrupo(!value);
+    }
+  };
 
   const fetchGrupos = useCallback(async () => {
     setLoading(true);
@@ -52,17 +106,30 @@ export function GruposNotificacaoList() {
       let query = (supabase
         .from("grupos_notificacao") as any)
         .select("*")
-        .order("centro_custo", { ascending: true });
+        .order("nome_grupo", { ascending: true });
 
       if (debouncedSearch) {
         query = query.or(
-          `nome_grupo.ilike.%${debouncedSearch}%,centro_custo.ilike.%${debouncedSearch}%,contato.ilike.%${debouncedSearch}%`
+          `nome_grupo.ilike.%${debouncedSearch}%,contato.ilike.%${debouncedSearch}%`
         );
       }
 
       const { data, error } = await query;
       if (error) throw error;
-      setGrupos(data || []);
+
+      // Filtro adicional client-side por centro de custo (busca em array)
+      const filtered = debouncedSearch
+        ? (data || []).filter(
+            (g: GrupoNotificacao) =>
+              g.nome_grupo?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+              g.contato?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+              (g.centros_custo || []).some((cc) =>
+                cc.toLowerCase().includes(debouncedSearch.toLowerCase())
+              )
+          )
+        : data || [];
+
+      setGrupos(filtered);
     } catch (error) {
       console.error("Erro ao buscar grupos:", error);
       toast.error("Erro ao carregar grupos");
@@ -77,7 +144,8 @@ export function GruposNotificacaoList() {
 
   const resetForm = () => {
     setFormNome("");
-    setFormCentroCusto("");
+    setFormCentrosCusto([]);
+    setFormCentroCustoInput("");
     setFormContato("");
     setEditingId(null);
     setShowForm(false);
@@ -85,15 +153,31 @@ export function GruposNotificacaoList() {
 
   const handleEdit = (grupo: GrupoNotificacao) => {
     setFormNome(grupo.nome_grupo);
-    setFormCentroCusto(grupo.centro_custo);
+    setFormCentrosCusto(grupo.centros_custo || []);
+    setFormCentroCustoInput("");
     setFormContato(grupo.contato);
     setEditingId(grupo.id);
     setShowForm(true);
   };
 
+  const addCentroCusto = () => {
+    const value = formCentroCustoInput.trim();
+    if (!value) return;
+    if (formCentrosCusto.includes(value)) {
+      toast.error("Centro de custo já adicionado");
+      return;
+    }
+    setFormCentrosCusto([...formCentrosCusto, value]);
+    setFormCentroCustoInput("");
+  };
+
+  const removeCentroCusto = (cc: string) => {
+    setFormCentrosCusto(formCentrosCusto.filter((c) => c !== cc));
+  };
+
   const handleSave = async () => {
-    if (!formNome.trim() || !formCentroCusto.trim() || !formContato.trim()) {
-      toast.error("Preencha todos os campos");
+    if (!formNome.trim() || formCentrosCusto.length === 0 || !formContato.trim()) {
+      toast.error("Preencha todos os campos e adicione ao menos 1 centro de custo");
       return;
     }
 
@@ -106,7 +190,7 @@ export function GruposNotificacaoList() {
           .from("grupos_notificacao") as any)
           .update({
             nome_grupo: formNome.trim(),
-            centro_custo: formCentroCusto.trim(),
+            centros_custo: formCentrosCusto,
             contato: formContato.trim(),
           })
           .eq("id", editingId);
@@ -115,7 +199,7 @@ export function GruposNotificacaoList() {
       } else {
         const { error } = await (supabase.from("grupos_notificacao") as any).insert({
           nome_grupo: formNome.trim(),
-          centro_custo: formCentroCusto.trim(),
+          centros_custo: formCentrosCusto,
           contato: formContato.trim(),
         });
         if (error) throw error;
@@ -151,6 +235,29 @@ export function GruposNotificacaoList() {
     }
   };
 
+  const handleToggleAtivo = async (grupo: GrupoNotificacao) => {
+    // Otimista
+    setGrupos((prev) =>
+      prev.map((g) => (g.id === grupo.id ? { ...g, ativo: !g.ativo } : g))
+    );
+    try {
+      const supabase = getSupabaseComprasClient();
+      const { error } = await (supabase
+        .from("grupos_notificacao") as any)
+        .update({ ativo: !grupo.ativo })
+        .eq("id", grupo.id);
+      if (error) throw error;
+      toast.success(!grupo.ativo ? "Grupo ativado" : "Grupo desativado");
+    } catch (error) {
+      console.error("Erro ao atualizar grupo:", error);
+      toast.error("Erro ao atualizar grupo");
+      // Reverter
+      setGrupos((prev) =>
+        prev.map((g) => (g.id === grupo.id ? { ...g, ativo: grupo.ativo } : g))
+      );
+    }
+  };
+
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("pt-BR", {
       day: "2-digit",
@@ -159,16 +266,7 @@ export function GruposNotificacaoList() {
     });
   };
 
-  // Agrupar por centro de custo
-  const grouped = grupos.reduce(
-    (acc, grupo) => {
-      const cc = grupo.centro_custo;
-      if (!acc[cc]) acc[cc] = [];
-      acc[cc].push(grupo);
-      return acc;
-    },
-    {} as Record<string, GrupoNotificacao[]>
-  );
+  // Cards mobile usam ordem natural (sem agrupar - 1 grupo pode ter vários CCs)
 
   return (
     <div className="min-h-screen bg-[var(--background-alt)]">
@@ -250,15 +348,54 @@ export function GruposNotificacaoList() {
 
                 <div>
                   <label className="block text-[11px] font-semibold text-[var(--muted-foreground)] uppercase tracking-wider mb-1.5">
-                    Centro de Custo
+                    Centros de Custo
                   </label>
-                  <input
-                    type="text"
-                    value={formCentroCusto}
-                    onChange={(e) => setFormCentroCusto(e.target.value)}
-                    placeholder="Ex: 120"
-                    className="w-full px-3 py-2.5 bg-white border border-[var(--border)] rounded-lg text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-black/20 transition-all"
-                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={formCentroCustoInput}
+                      onChange={(e) => setFormCentroCustoInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addCentroCusto();
+                        }
+                      }}
+                      placeholder="Ex: 120 (pressione Enter para adicionar)"
+                      className="flex-1 px-3 py-2.5 bg-white border border-[var(--border)] rounded-lg text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-black/20 transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={addCentroCusto}
+                      disabled={!formCentroCustoInput.trim()}
+                      className="px-3 py-2.5 bg-black text-white text-sm font-medium rounded-lg hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {formCentrosCusto.length > 0 && (
+                    <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                      {formCentrosCusto.map((cc) => (
+                        <span
+                          key={cc}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[var(--background-secondary)] text-xs font-mono text-[var(--foreground)]"
+                        >
+                          <Building2 className="w-3 h-3 text-[var(--muted-foreground)]" />
+                          {cc}
+                          <button
+                            type="button"
+                            onClick={() => removeCentroCusto(cc)}
+                            className="ml-0.5 text-[var(--muted-foreground)] hover:text-red-600"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <p className="mt-1.5 text-[11px] text-[var(--muted-foreground)]">
+                    Adicione todos os centros de custo que devem notificar este grupo
+                  </p>
                 </div>
 
                 <div>
@@ -302,6 +439,68 @@ export function GruposNotificacaoList() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Configurações Globais */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4">
+        <div className="bg-white rounded-xl border border-[var(--border)] p-4">
+          <p className="text-[11px] font-semibold text-[var(--muted-foreground)] uppercase tracking-wider mb-3">
+            Configurações Globais de Notificação
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Toggle Fornecedor */}
+            <div className="flex items-center justify-between p-3 bg-[var(--background-alt)] rounded-lg">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-[var(--foreground)]">
+                  Notificar Fornecedor
+                </p>
+                <p className="text-[11px] text-[var(--muted-foreground)] mt-0.5">
+                  Ao desativar, nenhum fornecedor recebe WhatsApp
+                </p>
+              </div>
+              <button
+                onClick={() =>
+                  updateConfig("notificar_fornecedor", !notificarFornecedor)
+                }
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ml-3 ${
+                  notificarFornecedor ? "bg-emerald-500" : "bg-gray-300"
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    notificarFornecedor ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Toggle Grupo */}
+            <div className="flex items-center justify-between p-3 bg-[var(--background-alt)] rounded-lg">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-[var(--foreground)]">
+                  Notificar Grupos da Obra
+                </p>
+                <p className="text-[11px] text-[var(--muted-foreground)] mt-0.5">
+                  Ao desativar, nenhum grupo recebe WhatsApp
+                </p>
+              </div>
+              <button
+                onClick={() =>
+                  updateConfig("notificar_grupo", !notificarGrupo)
+                }
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ml-3 ${
+                  notificarGrupo ? "bg-emerald-500" : "bg-gray-300"
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    notificarGrupo ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Search */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4">
@@ -364,10 +563,13 @@ export function GruposNotificacaoList() {
                       Nome do Grupo
                     </th>
                     <th className="text-left text-[11px] font-semibold text-[var(--muted-foreground)] uppercase tracking-wider px-4 py-3">
-                      Centro de Custo
+                      Centros de Custo
                     </th>
                     <th className="text-left text-[11px] font-semibold text-[var(--muted-foreground)] uppercase tracking-wider px-4 py-3">
                       Contato / ID Grupo
+                    </th>
+                    <th className="text-left text-[11px] font-semibold text-[var(--muted-foreground)] uppercase tracking-wider px-4 py-3">
+                      Status
                     </th>
                     <th className="text-left text-[11px] font-semibold text-[var(--muted-foreground)] uppercase tracking-wider px-4 py-3">
                       Cadastrado em
@@ -398,11 +600,19 @@ export function GruposNotificacaoList() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <Building2 className="w-3.5 h-3.5 text-[var(--muted-foreground)]" />
-                          <span className="text-xs font-mono text-[var(--foreground)]">
-                            {grupo.centro_custo}
-                          </span>
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {(grupo.centros_custo || []).map((cc) => (
+                            <span
+                              key={cc}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--background-secondary)] text-xs font-mono text-[var(--foreground)]"
+                            >
+                              <Building2 className="w-3 h-3 text-[var(--muted-foreground)]" />
+                              {cc}
+                            </span>
+                          ))}
+                          {(!grupo.centros_custo || grupo.centros_custo.length === 0) && (
+                            <span className="text-[11px] text-[var(--muted-foreground)]">—</span>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -412,6 +622,21 @@ export function GruposNotificacaoList() {
                             {grupo.contato}
                           </span>
                         </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => handleToggleAtivo(grupo)}
+                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                            grupo.ativo ? "bg-emerald-500" : "bg-gray-300"
+                          }`}
+                          title={grupo.ativo ? "Desativar notificação" : "Ativar notificação"}
+                        >
+                          <span
+                            className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                              grupo.ativo ? "translate-x-5" : "translate-x-1"
+                            }`}
+                          />
+                        </button>
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-xs text-[var(--muted-foreground)]">
@@ -449,45 +674,51 @@ export function GruposNotificacaoList() {
 
             {/* Mobile Cards */}
             <div className="md:hidden space-y-3">
-              {Object.entries(grouped).map(([cc, items]) => (
-                <div key={cc} className="space-y-2">
-                  <div className="flex items-center gap-2 px-1">
-                    <Building2 className="w-3.5 h-3.5 text-[var(--muted-foreground)]" />
-                    <span className="text-[11px] font-semibold text-[var(--muted-foreground)] uppercase tracking-wider">
-                      Centro de Custo: {cc}
-                    </span>
-                  </div>
-                  {items.map((grupo) => (
-                    <div
-                      key={grupo.id}
-                      className="bg-white rounded-xl border border-[var(--border)] p-4 space-y-2"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <p className="text-sm font-semibold text-[var(--foreground)]">
-                            {grupo.nome_grupo}
-                          </p>
-                          <p className="text-[11px] text-[var(--muted-foreground)] mt-0.5 font-mono">
-                            {grupo.contato}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => handleEdit(grupo)}
-                            className="p-1.5 rounded-lg hover:bg-[var(--background-secondary)]"
-                          >
-                            <Edit2 className="w-4 h-4 text-[var(--muted-foreground)]" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(grupo.id)}
-                            className="p-1.5 rounded-lg hover:bg-red-50"
-                          >
-                            <Trash2 className="w-4 h-4 text-[var(--muted-foreground)]" />
-                          </button>
-                        </div>
-                      </div>
+              {grupos.map((grupo) => (
+                <div
+                  key={grupo.id}
+                  className="bg-white rounded-xl border border-[var(--border)] p-4 space-y-3"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-[var(--foreground)]">
+                        {grupo.nome_grupo}
+                        {!grupo.ativo && (
+                          <span className="ml-1.5 text-[10px] text-[var(--muted-foreground)] font-normal">
+                            (inativo)
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-[11px] text-[var(--muted-foreground)] mt-0.5 font-mono truncate">
+                        {grupo.contato}
+                      </p>
                     </div>
-                  ))}
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleEdit(grupo)}
+                        className="p-1.5 rounded-lg hover:bg-[var(--background-secondary)]"
+                      >
+                        <Edit2 className="w-4 h-4 text-[var(--muted-foreground)]" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(grupo.id)}
+                        className="p-1.5 rounded-lg hover:bg-red-50"
+                      >
+                        <Trash2 className="w-4 h-4 text-[var(--muted-foreground)]" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {(grupo.centros_custo || []).map((cc) => (
+                      <span
+                        key={cc}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--background-secondary)] text-[11px] font-mono text-[var(--foreground)]"
+                      >
+                        <Building2 className="w-3 h-3 text-[var(--muted-foreground)]" />
+                        {cc}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>

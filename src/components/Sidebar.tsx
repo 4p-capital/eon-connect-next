@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import {
   Wrench, Menu, X, ChevronLeft, ChevronDown, LogOut, Users,
-  FolderOpen, LayoutDashboard, MessageCircle, Sparkles, UserCircle, FileText, Bell, Users2, List,
+  FolderOpen, LayoutDashboard, MessageCircle, Sparkles, UserCircle, FileText, Bell, Users2, List, BarChart3,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useRouter, usePathname } from 'next/navigation';
@@ -137,6 +137,16 @@ export function Sidebar({ onWidthChange }: SidebarProps) {
           id: 'notificacoes-fornecedor',
           icon: List,
           label: 'Pedidos',
+        },
+        {
+          id: 'notificacoes-fornecedor/historico',
+          icon: BarChart3,
+          label: 'Histórico Fornecedores',
+        },
+        {
+          id: 'notificacoes-fornecedor/historico-grupos',
+          icon: BarChart3,
+          label: 'Histórico Grupos',
         },
         {
           id: 'notificacoes-fornecedor/grupos',
