@@ -82,6 +82,13 @@ function isSiengeFalhou(termo: Termo): boolean {
 
 // ── Componente ─────────────────────────────────────────────────────
 
+interface MetricasTotais {
+  aguardando: number;
+  assinados: number;
+  vencidos: number;
+  siengeErro: number;
+}
+
 export function TermosAssistenciaList() {
   const [termos, setTermos] = useState<Termo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,6 +102,7 @@ export function TermosAssistenciaList() {
   const [filtroSienge, setFiltroSienge] = useState<FiltroSienge>('');
   const [showFilters, setShowFilters] = useState(false);
   const [reenviando, setReenviando] = useState<number | null>(null);
+  const [metricas, setMetricas] = useState<MetricasTotais | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   // Debounce
@@ -140,15 +148,34 @@ export function TermosAssistenciaList() {
 
   useEffect(() => { fetchTermos(); }, [fetchTermos]);
 
-  // ── Métricas baseadas na lógica correta ──
-  // Aguardando = tipo_finalizacao null (dentro do prazo, esperando cliente)
-  const totalAguardando = termos.filter(t => !t.tipo_finalizacao).length;
-  // Assinados = cliente assinou via Clicksign
-  const totalAssinados = termos.filter(t => t.tipo_finalizacao === 'assinado').length;
-  // Vencidos = prazo expirou, aceitação tácita
-  const totalVencidos = termos.filter(t => t.tipo_finalizacao === 'vencida').length;
-  // Sienge falhou = já finalizou (assinado ou vencida) mas Sienge não recebeu
-  const totalSiengeErro = termos.filter(t => isSiengeFalhou(t)).length;
+  // ── Métricas globais (independente da página) ──
+  const fetchMetricas = useCallback(async () => {
+    try {
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/termos-assistencia?page=1&limit=9999`,
+        { headers: { Authorization: `Bearer ${publicAnonKey}` } }
+      );
+      const result: ApiResponse = await response.json();
+      if (!response.ok) return;
+
+      const todos = result.data || [];
+      setMetricas({
+        aguardando: todos.filter(t => !t.tipo_finalizacao).length,
+        assinados: todos.filter(t => t.tipo_finalizacao === 'assinado').length,
+        vencidos: todos.filter(t => t.tipo_finalizacao === 'vencida').length,
+        siengeErro: todos.filter(t => isSiengeFalhou(t)).length,
+      });
+    } catch (err) {
+      console.error('Erro ao buscar métricas:', err);
+    }
+  }, []);
+
+  useEffect(() => { fetchMetricas(); }, [fetchMetricas]);
+
+  const totalAguardando = metricas?.aguardando ?? 0;
+  const totalAssinados = metricas?.assinados ?? 0;
+  const totalVencidos = metricas?.vencidos ?? 0;
+  const totalSiengeErro = metricas?.siengeErro ?? 0;
 
   // Reenviar ao Sienge
   const reenviarSienge = async (termo: Termo) => {
@@ -169,6 +196,7 @@ export function TermosAssistenciaList() {
       if (result.success) {
         toast.success('Termo enviado ao Sienge com sucesso!');
         fetchTermos();
+        fetchMetricas();
       } else {
         toast.error(result.error || 'Erro ao enviar ao Sienge');
       }
@@ -320,7 +348,7 @@ export function TermosAssistenciaList() {
       </div>
 
       {/* Métricas */}
-      {!loading && termos.length > 0 && (
+      {metricas && (totalAguardando + totalAssinados + totalVencidos + totalSiengeErro) > 0 && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {/* Aguardando assinatura = azul */}
