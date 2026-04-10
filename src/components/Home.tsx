@@ -1,6 +1,6 @@
 "use client";
 
-import { Wrench, Clock, Shield, Sparkles, ArrowRight, Users, FolderOpen, AlertCircle } from 'lucide-react';
+import { Wrench, Clock, Shield, Sparkles, ArrowRight, Users, FolderOpen, AlertCircle, Bell } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -119,6 +119,16 @@ export function Home() {
       iconBg: 'bg-gray-100',
       route: 'cadastros',
       enabled: userData?.menu_cadastro || false
+    },
+    {
+      id: 'notificacoes',
+      title: 'Notificações',
+      description: 'Pedidos aprovados e notificações para fornecedores',
+      icon: Bell,
+      iconColor: 'text-blue-600',
+      iconBg: 'bg-blue-50',
+      route: 'notificacoes-fornecedor',
+      enabled: true
     },
     {
       id: 'gerenciamento',
