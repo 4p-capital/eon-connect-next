@@ -44,6 +44,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     checkSession();
+
+    const supabase = getSupabaseClient();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        setAccessToken(null);
+        setUserId(null);
+        setUserName("Usuario");
+        setUserEmail("usuario@email.com");
+        setIsAuthenticated(false);
+        setAuthView("login");
+      }
+    });
+
+    return () => subscription.unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

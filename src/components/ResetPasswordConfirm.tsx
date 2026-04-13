@@ -101,6 +101,10 @@ export function ResetPasswordConfirm({ onNavigateToLogin }: ResetPasswordConfirm
         return;
       }
 
+      // Invalidar TODAS as sessões ativas do usuário em todos os dispositivos,
+      // forçando novo login com a senha recém-definida.
+      await supabase.auth.signOut({ scope: 'global' });
+
       console.log('Senha atualizada com sucesso');
       setSuccess(true);
       setLoading(false);
