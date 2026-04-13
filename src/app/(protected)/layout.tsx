@@ -56,10 +56,10 @@ export default function ProtectedLayout({
         <div className="text-center">
           <Image
             src={eonLogo}
-            alt="EON"
-            className="h-12 mb-8 mx-auto animate-pulse"
-            width={48}
-            height={48}
+            alt="EON Connect"
+            className="h-12 w-auto mb-8 mx-auto animate-pulse"
+            width={536}
+            height={312}
           />
           <div className="w-12 h-12 border-3 border-[#E5E7EB] border-t-black rounded-full animate-spin mx-auto mb-4" />
           <p className="text-[#9CA3AF]">Carregando...</p>

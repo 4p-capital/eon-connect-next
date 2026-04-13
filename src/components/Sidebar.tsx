@@ -317,7 +317,7 @@ export function Sidebar({ onWidthChange }: SidebarProps) {
             className="md:hidden fixed top-0 left-0 bottom-0 w-80 bg-white z-50 flex flex-col shadow-xl"
           >
             <div className="h-16 flex items-center px-6 border-b border-gray-200">
-              <img src={typeof eonLogo === "string" ? eonLogo : eonLogo.src} alt="EON" className="h-8" />
+              <img src={typeof eonLogo === "string" ? eonLogo : eonLogo.src} alt="EON Connect" className="h-8 w-auto" />
             </div>
 
             <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
@@ -356,7 +356,7 @@ export function Sidebar({ onWidthChange }: SidebarProps) {
                 exit={{ opacity: 0 }}
                 className="flex items-center px-6 w-full"
               >
-                <img src={typeof eonLogo === "string" ? eonLogo : eonLogo.src} alt="EON" className="h-8" />
+                <img src={typeof eonLogo === "string" ? eonLogo : eonLogo.src} alt="EON Connect" className="h-8 w-auto" />
               </motion.div>
             ) : (
               <motion.div
@@ -366,7 +366,7 @@ export function Sidebar({ onWidthChange }: SidebarProps) {
                 exit={{ opacity: 0, scale: 0.8 }}
                 className="flex items-center justify-center"
               >
-                <img src={typeof eonLogo === "string" ? eonLogo : eonLogo.src} alt="EON" className="h-6" />
+                <img src={typeof eonLogo === "string" ? eonLogo : eonLogo.src} alt="EON Connect" className="h-6 w-auto" />
               </motion.div>
             )}
           </AnimatePresence>
