@@ -1,12 +1,10 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Users, Shield, Search, Loader2, AlertCircle, Book, Package, BarChart3 } from 'lucide-react';
+import { Users, Shield, Search, Loader2, AlertCircle, Package } from 'lucide-react';
 import { usePermissionGuard } from '@/hooks/usePermissionGuard';
 import { projectId, publicAnonKey } from '@/utils/supabase/info';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { DocumentacaoAPI } from '@/components/DocumentacaoAPI';
-import { PerformanceLogs } from '@/components/PerformanceLogs';
 import { GerenciarMateriais } from '@/components/GerenciarMateriais';
 import { withRetry } from '@/utils/errorHandler';
 
@@ -239,7 +237,7 @@ export function Gerenciamento() {
             </div>
             <div>
               <h1 className="text-2xl font-semibold text-[#1B1B1B]">Gerenciamento</h1>
-              <p className="text-[#4B5563] text-sm">Gerencie usuários e consulte a documentação da API</p>
+              <p className="text-[#4B5563] text-sm">Gerencie usuários e materiais</p>
             </div>
           </div>
           
@@ -271,34 +269,20 @@ export function Gerenciamento() {
 
         {/* Tabs */}
         <Tabs defaultValue="usuarios" className="w-full">
-          <TabsList className="grid w-full max-w-3xl grid-cols-4 bg-white p-1.5 h-auto shadow-sm border border-[#E5E7EB] rounded-xl mb-6">
-            <TabsTrigger 
-              value="usuarios" 
+          <TabsList className="grid w-full max-w-sm grid-cols-2 bg-white p-1.5 h-auto shadow-sm border border-[#E5E7EB] rounded-xl mb-6">
+            <TabsTrigger
+              value="usuarios"
               className="flex items-center justify-center gap-2 data-[state=active]:bg-black data-[state=active]:text-white py-2.5 rounded-lg transition-all duration-200"
             >
               <Users className="h-4 w-4" />
               Usuários
             </TabsTrigger>
-            <TabsTrigger 
-              value="materiais" 
+            <TabsTrigger
+              value="materiais"
               className="flex items-center justify-center gap-2 data-[state=active]:bg-black data-[state=active]:text-white py-2.5 rounded-lg transition-all duration-200"
             >
               <Package className="h-4 w-4" />
               Materiais
-            </TabsTrigger>
-            <TabsTrigger 
-              value="performance" 
-              className="flex items-center justify-center gap-2 data-[state=active]:bg-black data-[state=active]:text-white py-2.5 rounded-lg transition-all duration-200"
-            >
-              <BarChart3 className="h-4 w-4" />
-              Performance
-            </TabsTrigger>
-            <TabsTrigger 
-              value="documentacao" 
-              className="flex items-center justify-center gap-2 data-[state=active]:bg-black data-[state=active]:text-white py-2.5 rounded-lg transition-all duration-200"
-            >
-              <Book className="h-4 w-4" />
-              Documentação
             </TabsTrigger>
           </TabsList>
 
@@ -519,15 +503,6 @@ export function Gerenciamento() {
             </div>
           </TabsContent>
 
-          {/* Performance Logs */}
-          <TabsContent value="performance">
-            <PerformanceLogs />
-          </TabsContent>
-
-          {/* Documentação API */}
-          <TabsContent value="documentacao">
-            <DocumentacaoAPI />
-          </TabsContent>
         </Tabs>
       </div>
     </div>

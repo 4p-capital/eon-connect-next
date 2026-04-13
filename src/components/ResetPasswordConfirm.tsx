@@ -18,22 +18,40 @@ export function ResetPasswordConfirm({ onNavigateToLogin }: ResetPasswordConfirm
   const [success, setSuccess] = useState(false);
   const [tokenValid, setTokenValid] = useState(true);
 
-  // Verificar se há um token válido ao montar
+  // Verificar / estabelecer sessão de recuperação ao montar
   useEffect(() => {
     const checkToken = async () => {
       try {
         const { getSupabaseClient } = await import('@/utils/supabase/client');
         const supabase = getSupabaseClient();
 
-        const { data: { session }, error } = await supabase.auth.getSession();
+        // 1. Verificar se sessão já está ativa (AuthContext pode ter estabelecido antes)
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) return;
 
-        if (error || !session) {
-          console.error('Token de recuperação inválido ou expirado');
-          setTokenValid(false);
-          setError('Link de recuperação inválido ou expirado. Solicite um novo link.');
-        } else {
-          console.log('Token de recuperação válido');
+        // 2. Tentar trocar o token presente na URL (hash ou query params)
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const queryParams = new URLSearchParams(window.location.search);
+        const tokenFromUrl =
+          hashParams.get("access_token") || queryParams.get("access_token") ||
+          queryParams.get("token_hash");
+
+        if (tokenFromUrl) {
+          window.history.replaceState(null, "", window.location.pathname);
+          const { error: verifyError } = await supabase.auth.verifyOtp({
+            token_hash: tokenFromUrl,
+            type: "recovery",
+          });
+          if (verifyError) {
+            setTokenValid(false);
+            setError('Link de recuperação inválido ou expirado. Solicite um novo link.');
+          }
+          return;
         }
+
+        // 3. Sem sessão e sem token na URL
+        setTokenValid(false);
+        setError('Link de recuperação inválido ou expirado. Solicite um novo link.');
       } catch (err) {
         console.error('Erro ao verificar token:', err);
         setTokenValid(false);

@@ -12,7 +12,7 @@ import {
 import { getSupabaseClient } from "@/utils/supabase/client";
 import { apiBaseUrl, publicAnonKey } from "@/utils/supabase/info";
 
-type AuthView = "login" | "signup" | "reset" | "verify-email" | "email-confirmado";
+type AuthView = "login" | "signup" | "reset" | "verify-email" | "email-confirmado" | "reset-password-confirm";
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -51,32 +51,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const supabase = getSupabaseClient();
 
-      // Verificar tokens de autenticacao no hash (callback do Supabase)
-      const hashParams = new URLSearchParams(
-        window.location.hash.substring(1)
-      );
-      const hashType = hashParams.get("type");
-      const accessTokenFromHash = hashParams.get("access_token");
+      // Chamar getSession() PRIMEIRO para que o Supabase processe o hash da URL
+      // e armazene a sessão em memória/localStorage (detectSessionInUrl: true)
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
 
-      if (accessTokenFromHash) {
+      // Se já estamos na página de reset, ela cuida do próprio token.
+      // O AuthContext não deve interferir para evitar condição de corrida.
+      if (window.location.pathname === "/reset-password-confirm") {
+        setLoading(false);
+        return;
+      }
+
+      // Verificar token de auth tanto no hash (#) quanto nos query params (?)
+      // Supabase pode usar qualquer um dos dois dependendo da versão/configuração
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const queryParams = new URLSearchParams(window.location.search);
+
+      const tokenType = hashParams.get("type") || queryParams.get("type");
+      const tokenFromUrl =
+        hashParams.get("access_token") || queryParams.get("access_token") ||
+        queryParams.get("token_hash");
+
+      if (tokenFromUrl) {
+        // Limpar hash e query params da URL
         window.history.replaceState(null, "", window.location.pathname);
 
-        if (hashType === "recovery") {
+        if (tokenType === "recovery") {
+          // Se getSession() ainda não estabeleceu sessão, trocar o token manualmente
+          if (!session) {
+            await supabase.auth.verifyOtp({
+              token_hash: tokenFromUrl,
+              type: "recovery",
+            });
+          }
+          setAuthView("reset-password-confirm");
           setLoading(false);
-          window.location.replace("/reset-password-confirm");
           return;
         } else {
+          // Confirmação de email ou signup
+          if (!session) {
+            const otpType = (tokenType === "signup" || tokenType === "magiclink")
+              ? tokenType
+              : "email";
+            await supabase.auth.verifyOtp({
+              token_hash: tokenFromUrl,
+              type: otpType,
+            });
+          }
           setAuthView("email-confirmado");
           setLoading(false);
           return;
         }
       }
-
-      // Verificar sessao ativa
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
 
       if (sessionError) {
         if (

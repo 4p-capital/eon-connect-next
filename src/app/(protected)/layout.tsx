@@ -12,6 +12,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Login } from "@/components/Login";
 import { SignUp } from "@/components/SignUp";
 import { ResetPassword } from "@/components/ResetPassword";
+import { ResetPasswordConfirm } from "@/components/ResetPasswordConfirm";
 import { VerifiqueEmail } from "@/components/VerifiqueEmail";
 import { EmailConfirmado } from "@/components/EmailConfirmado";
 import eonLogo from "@/assets/0d61051e7e3d9184d675cfec8b0341c5383f7b2a.png";
@@ -99,6 +100,12 @@ export default function ProtectedLayout({
     if (authView === "reset") {
       return (
         <ResetPassword onNavigateToLogin={() => setAuthView("login")} />
+      );
+    }
+
+    if (authView === "reset-password-confirm") {
+      return (
+        <ResetPasswordConfirm onNavigateToLogin={() => setAuthView("login")} />
       );
     }
 
