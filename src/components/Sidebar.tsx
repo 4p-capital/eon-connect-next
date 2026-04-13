@@ -131,7 +131,7 @@ export function Sidebar({ onWidthChange }: SidebarProps) {
       id: 'notificacoes-fornecedor',
       icon: Bell,
       label: 'Notificações',
-      visible: true,
+      visible: userData?.menu_notificacoes === true,
       children: [
         {
           id: 'notificacoes-fornecedor',

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 import { getSupabaseComprasClient } from "@/utils/supabase-compras/client";
+import { usePermissionGuard } from "@/hooks/usePermissionGuard";
 
 interface GrupoStats {
   grupo_id: string;
@@ -31,6 +32,7 @@ interface GrupoStats {
 }
 
 export function GruposHistoricoList() {
+  usePermissionGuard("menu_notificacoes");
   const [grupos, setGrupos] = useState<GrupoStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");

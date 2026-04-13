@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 import { getSupabaseComprasClient } from "@/utils/supabase-compras/client";
+import { usePermissionGuard } from "@/hooks/usePermissionGuard";
 
 interface FornecedorStats {
   id_fornecedor: string;
@@ -29,6 +30,7 @@ interface FornecedorStats {
 }
 
 export function FornecedoresHistoricoList() {
+  usePermissionGuard("menu_notificacoes");
   const [fornecedores, setFornecedores] = useState<FornecedorStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");

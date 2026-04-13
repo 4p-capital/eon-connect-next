@@ -2498,7 +2498,7 @@ app.get("/make-server-a8708d5d/users/all", async (c) => {
     const { data, error } = await queryWithTimeout(
       supabase
         .from('User')
-        .select('id, nome, email, cpf, telefone, idempresa, nivel_permissao, created_at, ativo, menu_assistencia, menu_gerenciamento, menu_planejamento, menu_cadastro')
+        .select('id, nome, email, cpf, telefone, idempresa, nivel_permissao, created_at, ativo, menu_assistencia, menu_gerenciamento, menu_planejamento, menu_cadastro, menu_notificacoes')
         .order('created_at', { ascending: false })
         .limit(50) // MÁXIMO ABSOLUTO: 50 usuários
     );
@@ -2540,7 +2540,7 @@ app.get("/make-server-a8708d5d/users/me", async (c) => {
     let result = await queryWithTimeout(
       supabase
         .from('User')
-        .select('id, nome, email, auth_user_id, ativo, menu_assistencia, menu_gerenciamento, menu_planejamento, menu_cadastro')
+        .select('id, nome, email, auth_user_id, ativo, menu_assistencia, menu_gerenciamento, menu_planejamento, menu_cadastro, menu_notificacoes')
         .eq('auth_user_id', authUuid)
         .maybeSingle()
     );
@@ -2562,7 +2562,7 @@ app.get("/make-server-a8708d5d/users/me", async (c) => {
         result = await queryWithTimeout(
           supabase
             .from('User')
-            .select('id, nome, email, auth_user_id, ativo, menu_assistencia, menu_gerenciamento, menu_planejamento, menu_cadastro')
+            .select('id, nome, email, auth_user_id, ativo, menu_assistencia, menu_gerenciamento, menu_planejamento, menu_cadastro, menu_notificacoes')
             .eq('email', email)
             .maybeSingle()
         );
@@ -2627,6 +2627,7 @@ app.patch("/make-server-a8708d5d/users/:id/permissions", async (c) => {
     if (body.menu_gerenciamento !== undefined) updateData.menu_gerenciamento = body.menu_gerenciamento;
     if (body.menu_planejamento !== undefined) updateData.menu_planejamento = body.menu_planejamento;
     if (body.menu_cadastro !== undefined) updateData.menu_cadastro = body.menu_cadastro;
+    if (body.menu_notificacoes !== undefined) updateData.menu_notificacoes = body.menu_notificacoes;
     if (body.ativo !== undefined) updateData.ativo = body.ativo;
     
     console.log(`📝 Dados para atualizar:`, updateData);

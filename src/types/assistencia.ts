@@ -107,4 +107,5 @@ export interface UserData {
   menu_gerenciamento: boolean;
   menu_planejamento: boolean;
   menu_cadastro: boolean;
+  menu_notificacoes: boolean;
 }

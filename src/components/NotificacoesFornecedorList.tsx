@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 import { getSupabaseComprasClient } from "@/utils/supabase-compras/client";
+import { usePermissionGuard } from "@/hooks/usePermissionGuard";
 import { WhatsAppStatusIcon, type WhatsAppStatus } from "./WhatsAppStatusIcon";
 import { PedidoDetailsDrawer } from "./PedidoDetailsDrawer";
 
@@ -72,6 +73,7 @@ interface Metrics {
 const LIMIT_OPTIONS = [50, 100, 200] as const;
 
 export function NotificacoesFornecedorList() {
+  usePermissionGuard("menu_notificacoes");
   const [eventos, setEventos] = useState<EventoPedido[]>([]);
   const [statusMap, setStatusMap] = useState<Record<string, StatusByEvento>>({});
   const [metrics, setMetrics] = useState<Metrics | null>(null);

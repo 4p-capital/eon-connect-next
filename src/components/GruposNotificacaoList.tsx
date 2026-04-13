@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { getSupabaseComprasClient } from "@/utils/supabase-compras/client";
+import { usePermissionGuard } from "@/hooks/usePermissionGuard";
 import { toast } from "sonner";
 
 interface GrupoNotificacao {
@@ -29,6 +30,7 @@ interface GrupoNotificacao {
 }
 
 export function GruposNotificacaoList() {
+  usePermissionGuard("menu_notificacoes");
   const [grupos, setGrupos] = useState<GrupoNotificacao[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");

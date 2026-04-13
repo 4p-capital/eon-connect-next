@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/contexts/UserContext';
 
-type PermissionType = 'menu_assistencia' | 'menu_gerenciamento' | 'menu_planejamento';
+type PermissionType = 'menu_assistencia' | 'menu_gerenciamento' | 'menu_planejamento' | 'menu_cadastro' | 'menu_notificacoes';
 
 /**
  * Hook para proteger páginas baseado em permissões

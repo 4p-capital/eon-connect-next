@@ -23,6 +23,7 @@ interface User {
   menu_assistencia: boolean;
   menu_gerenciamento: boolean;
   menu_cadastro: boolean;
+  menu_notificacoes: boolean;
 }
 
 export function Gerenciamento() {
@@ -331,6 +332,7 @@ export function Gerenciamento() {
                       <th className="px-6 py-4 text-center text-sm text-gray-600 whitespace-nowrap">Assistência</th>
                       <th className="px-6 py-4 text-center text-sm text-gray-600 whitespace-nowrap">Gerenciamento</th>
                       <th className="px-6 py-4 text-center text-sm text-gray-600 whitespace-nowrap">Cadastro</th>
+                      <th className="px-6 py-4 text-center text-sm text-gray-600 whitespace-nowrap">Notificações</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E5E7EB]">
@@ -426,6 +428,25 @@ export function Gerenciamento() {
                             </button>
                           </div>
                         </td>
+
+                        {/* Toggle Notificações */}
+                        <td className="px-6 py-4">
+                          <div className="flex justify-center">
+                            <button
+                              onClick={() => updatePermission(user.id, 'menu_notificacoes', !user.menu_notificacoes)}
+                              disabled={updatingUser === user.id}
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                user.menu_notificacoes ? 'bg-black' : 'bg-[#E5E7EB]'
+                              } ${updatingUser === user.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            >
+                              <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                  user.menu_notificacoes ? 'translate-x-6' : 'translate-x-1'
+                                }`}
+                              />
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -441,7 +462,7 @@ export function Gerenciamento() {
             </div>
 
             {/* Stats */}
-            <div className="mt-6 grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="mt-6 grid grid-cols-2 md:grid-cols-6 gap-4">
               <div className="bg-white rounded-xl shadow-sm border border-[#E5E7EB] p-4">
                 <div className="text-sm text-[#4B5563]">Total de Usuários</div>
                 <div className="text-2xl font-semibold text-[#1B1B1B] mt-1">{users.length}</div>
@@ -468,6 +489,12 @@ export function Gerenciamento() {
                 <div className="text-sm text-[#4B5563]">Com Cadastro</div>
                 <div className="text-2xl font-semibold text-gray-900 mt-1">
                   {users.filter(u => u.menu_cadastro && u.ativo).length}
+                </div>
+              </div>
+              <div className="bg-white rounded-xl p-4 border border-[#E5E7EB] shadow-sm">
+                <div className="text-sm text-[#4B5563]">Com Notificações</div>
+                <div className="text-2xl font-semibold text-gray-900 mt-1">
+                  {users.filter(u => u.menu_notificacoes && u.ativo).length}
                 </div>
               </div>
             </div>

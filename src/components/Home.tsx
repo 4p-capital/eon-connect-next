@@ -23,7 +23,8 @@ export function Home() {
   const hasAnyPermission = userData && (
     userData.menu_assistencia ||
     userData.menu_gerenciamento ||
-    userData.menu_cadastro
+    userData.menu_cadastro ||
+    userData.menu_notificacoes
   );
 
   if (loading) {
@@ -128,7 +129,7 @@ export function Home() {
       iconColor: 'text-blue-600',
       iconBg: 'bg-blue-50',
       route: 'notificacoes-fornecedor',
-      enabled: true
+      enabled: userData?.menu_notificacoes || false
     },
     {
       id: 'gerenciamento',
