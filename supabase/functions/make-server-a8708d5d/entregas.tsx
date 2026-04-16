@@ -587,3 +587,513 @@ entregasRoutes.post("/entregas/remarcar", async (c) => {
     return c.json({ ok: false, error: "Erro ao remarcar" }, 500);
   }
 });
+
+// ═══════════════════════════════════════════════════════════════════
+// 🏠 ENTREGA DE CHAVES — Fase 2: Recebimento (vistoria + docs)
+// ═══════════════════════════════════════════════════════════════════
+
+const BUCKET_RECEBIMENTO = "entrega-recebimento";
+let _recBucketChecked = false;
+
+async function ensureRecBucket() {
+  if (_recBucketChecked) return;
+  const supabase = getSupabase();
+  try {
+    const { data: buckets } = await supabase.storage.listBuckets();
+    if (!buckets?.some((b: any) => b.name === BUCKET_RECEBIMENTO)) {
+      await supabase.storage.createBucket(BUCKET_RECEBIMENTO, { public: false });
+    }
+    _recBucketChecked = true;
+  } catch (err) {
+    console.error("❌ Bucket recebimento:", err);
+  }
+}
+
+const CHECKLIST_VISTORIA = [
+  { key: "pintura_paredes", label: "Pintura das paredes" },
+  { key: "piso_ceramica", label: "Piso cerâmico" },
+  { key: "portas", label: "Portas" },
+  { key: "janelas", label: "Janelas" },
+  { key: "fechaduras", label: "Fechaduras" },
+  { key: "tomadas_interruptores", label: "Tomadas e interruptores" },
+  { key: "instalacao_eletrica", label: "Instalação elétrica" },
+  { key: "instalacao_hidraulica", label: "Instalação hidráulica" },
+  { key: "loucas_metais", label: "Louças e metais" },
+  { key: "bancadas", label: "Bancadas" },
+  { key: "forro_gesso", label: "Forro de gesso" },
+  { key: "rejunte", label: "Rejunte" },
+];
+
+// ───────────────────────────────────────────────────────────────────
+// GET /entregas/checkin/:token
+// Busca dados do slot+cliente pelo checkin_token
+// ───────────────────────────────────────────────────────────────────
+entregasRoutes.get("/entregas/checkin/:token", async (c) => {
+  try {
+    const token = c.req.param("token");
+    if (!token) return c.json({ ok: false, error: "Token inválido" }, 400);
+
+    const supabase = getSupabase();
+    const { data: slot, error } = await supabase
+      .from("entrega_slot")
+      .select(
+        `id, data, hora_inicio, hora_fim, checkin_token, reserva_cliente_id,
+         clientes_entrega_santorini!entrega_slot_reserva_cliente_id_fkey (
+           id, cliente, bloco, unidade, cpf_cnpj, telefone, email, reserva
+         )`,
+      )
+      .eq("checkin_token", token)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!slot) return c.json({ ok: false, error: "Token não encontrado" }, 404);
+
+    const cli = (slot as any).clientes_entrega_santorini;
+
+    // Verifica se já existe vistoria para este slot
+    const { data: vistoria } = await supabase
+      .from("vistoria_entrega")
+      .select("id, status")
+      .eq("entrega_slot_id", slot.id)
+      .maybeSingle();
+
+    return c.json({
+      ok: true,
+      slot: {
+        id: slot.id,
+        data: slot.data,
+        hora_inicio: slot.hora_inicio,
+        hora_fim: slot.hora_fim,
+      },
+      cliente: {
+        id: cli?.id,
+        nome: cli?.cliente,
+        bloco: cli?.bloco,
+        unidade: cli?.unidade,
+        cpf: cli?.cpf_cnpj,
+        telefone: cli?.telefone,
+        email: cli?.email,
+        reserva: cli?.reserva,
+      },
+      vistoria: vistoria ?? null,
+    });
+  } catch (err) {
+    console.error("❌ /entregas/checkin:", err);
+    return c.json({ ok: false, error: "Erro no check-in" }, 500);
+  }
+});
+
+// ───────────────────────────────────────────────────────────────────
+// POST /entregas/vistoria/criar
+// Cria registro de vistoria + itens do checklist
+// Body: { slot_id, tipo_representante? }
+// ───────────────────────────────────────────────────────────────────
+entregasRoutes.post("/entregas/vistoria/criar", async (c) => {
+  try {
+    const body = await c.req.json();
+    const slotId = String(body?.slot_id ?? "");
+    const tipo = body?.tipo_representante ?? "cliente";
+
+    if (!slotId) return c.json({ ok: false, error: "slot_id obrigatório" }, 400);
+
+    const supabase = getSupabase();
+
+    // Busca slot e cliente
+    const { data: slot, error: errSlot } = await supabase
+      .from("entrega_slot")
+      .select("id, reserva_cliente_id, checkin_token")
+      .eq("id", slotId)
+      .maybeSingle();
+
+    if (errSlot) throw errSlot;
+    if (!slot) return c.json({ ok: false, error: "Slot não encontrado" }, 404);
+    if (!slot.reserva_cliente_id)
+      return c.json({ ok: false, error: "Slot sem reserva" }, 400);
+
+    // Verifica se já existe vistoria
+    const { data: existente } = await supabase
+      .from("vistoria_entrega")
+      .select("id, status")
+      .eq("entrega_slot_id", slotId)
+      .maybeSingle();
+
+    if (existente) {
+      return c.json({ ok: true, vistoria: existente, ja_existia: true });
+    }
+
+    // Cria vistoria
+    const { data: vistoria, error: errVis } = await supabase
+      .from("vistoria_entrega")
+      .insert({
+        entrega_slot_id: slotId,
+        cliente_id: slot.reserva_cliente_id,
+        tipo_representante: tipo,
+        status: "aguardando_docs",
+      })
+      .select("id, status")
+      .single();
+
+    if (errVis) throw errVis;
+
+    // Cria itens do checklist
+    const itens = CHECKLIST_VISTORIA.map((item) => ({
+      vistoria_id: vistoria.id,
+      item_key: item.key,
+      item_label: item.label,
+    }));
+
+    const { error: errItens } = await supabase
+      .from("vistoria_entrega_item")
+      .insert(itens);
+
+    if (errItens) throw errItens;
+
+    return c.json({ ok: true, vistoria, ja_existia: false });
+  } catch (err) {
+    console.error("❌ /entregas/vistoria/criar:", err);
+    return c.json({ ok: false, error: "Erro ao criar vistoria" }, 500);
+  }
+});
+
+// ───────────────────────────────────────────────────────────────────
+// POST /entregas/vistoria/:id/upload-doc
+// Upload de documento de identificação (base64 → Storage)
+// Body: { tipo: 'identidade'|'procuracao'|'proprietario', base64 }
+// ───────────────────────────────────────────────────────────────────
+entregasRoutes.post("/entregas/vistoria/:id/upload-doc", async (c) => {
+  try {
+    const vistoriaId = c.req.param("id");
+    const body = await c.req.json();
+    const tipo = body?.tipo as string;
+    const base64 = body?.base64 as string;
+
+    if (!tipo || !base64)
+      return c.json({ ok: false, error: "tipo e base64 obrigatórios" }, 400);
+
+    const tiposValidos = ["identidade", "procuracao", "proprietario"];
+    if (!tiposValidos.includes(tipo))
+      return c.json({ ok: false, error: "Tipo inválido" }, 400);
+
+    const supabase = getSupabase();
+    await ensureRecBucket();
+
+    // Decode base64
+    const raw = base64.includes(",") ? base64.split(",")[1] : base64;
+    const bytes = Uint8Array.from(atob(raw), (ch) => ch.charCodeAt(0));
+
+    const ext = base64.startsWith("data:image/png") ? "png" : "jpg";
+    const path = `${vistoriaId}/docs/${tipo}_${Date.now()}.${ext}`;
+
+    const { error: upErr } = await supabase.storage
+      .from(BUCKET_RECEBIMENTO)
+      .upload(path, bytes, { contentType: `image/${ext}`, upsert: true });
+
+    if (upErr) throw upErr;
+
+    // Atualiza coluna correspondente
+    const coluna =
+      tipo === "identidade"
+        ? "doc_identidade_path"
+        : tipo === "procuracao"
+          ? "doc_procuracao_path"
+          : "doc_proprietario_path";
+
+    const { error: updErr } = await supabase
+      .from("vistoria_entrega")
+      .update({ [coluna]: path, updated_at: new Date().toISOString() })
+      .eq("id", vistoriaId);
+
+    if (updErr) throw updErr;
+
+    // Gera URL assinada
+    const { data: signed } = await supabase.storage
+      .from(BUCKET_RECEBIMENTO)
+      .createSignedUrl(path, 365 * 24 * 60 * 60);
+
+    return c.json({ ok: true, path, url: signed?.signedUrl });
+  } catch (err) {
+    console.error("❌ /entregas/vistoria/upload-doc:", err);
+    return c.json({ ok: false, error: "Erro ao fazer upload" }, 500);
+  }
+});
+
+// ───────────────────────────────────────────────────────────────────
+// POST /entregas/vistoria/:id/validar-docs
+// Marca documentos como validados e muda status
+// ───────────────────────────────────────────────────────────────────
+entregasRoutes.post("/entregas/vistoria/:id/validar-docs", async (c) => {
+  try {
+    const vistoriaId = c.req.param("id");
+    const supabase = getSupabase();
+
+    const { data: vis, error: errVis } = await supabase
+      .from("vistoria_entrega")
+      .select("id, tipo_representante, doc_identidade_path, doc_procuracao_path, doc_proprietario_path")
+      .eq("id", vistoriaId)
+      .maybeSingle();
+
+    if (errVis) throw errVis;
+    if (!vis) return c.json({ ok: false, error: "Vistoria não encontrada" }, 404);
+
+    // Valida se os docs obrigatórios foram enviados
+    if (!vis.doc_identidade_path)
+      return c.json({ ok: false, error: "Documento de identidade não enviado" }, 400);
+
+    if (vis.tipo_representante === "terceiro") {
+      if (!vis.doc_procuracao_path)
+        return c.json({ ok: false, error: "Procuração não enviada" }, 400);
+      if (!vis.doc_proprietario_path)
+        return c.json({ ok: false, error: "Doc. do proprietário não enviado" }, 400);
+    }
+
+    const { error } = await supabase
+      .from("vistoria_entrega")
+      .update({
+        docs_validados_em: new Date().toISOString(),
+        status: "docs_validados",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", vistoriaId);
+
+    if (error) throw error;
+    return c.json({ ok: true });
+  } catch (err) {
+    console.error("❌ /entregas/vistoria/validar-docs:", err);
+    return c.json({ ok: false, error: "Erro ao validar docs" }, 500);
+  }
+});
+
+// ───────────────────────────────────────────────────────────────────
+// GET /entregas/vistoria/:id
+// Retorna vistoria completa com itens e URLs dos docs
+// ───────────────────────────────────────────────────────────────────
+entregasRoutes.get("/entregas/vistoria/:id", async (c) => {
+  try {
+    const vistoriaId = c.req.param("id");
+    const supabase = getSupabase();
+
+    const { data: vis, error: errVis } = await supabase
+      .from("vistoria_entrega")
+      .select(
+        `*, clientes_entrega_santorini!vistoria_entrega_cliente_id_fkey (
+           cliente, bloco, unidade, cpf_cnpj, telefone, email
+         ),
+         entrega_slot!vistoria_entrega_entrega_slot_id_fkey (
+           data, hora_inicio, hora_fim
+         )`,
+      )
+      .eq("id", vistoriaId)
+      .maybeSingle();
+
+    if (errVis) throw errVis;
+    if (!vis) return c.json({ ok: false, error: "Vistoria não encontrada" }, 404);
+
+    // Busca itens
+    const { data: itens, error: errItens } = await supabase
+      .from("vistoria_entrega_item")
+      .select("*")
+      .eq("vistoria_id", vistoriaId)
+      .order("item_key", { ascending: true });
+
+    if (errItens) throw errItens;
+
+    // Gera URLs assinadas para docs e fotos
+    const signUrl = async (path: string | null) => {
+      if (!path) return null;
+      const { data } = await supabase.storage
+        .from(BUCKET_RECEBIMENTO)
+        .createSignedUrl(path, 24 * 60 * 60); // 24h
+      return data?.signedUrl ?? null;
+    };
+
+    const docUrls = {
+      identidade: await signUrl(vis.doc_identidade_path),
+      procuracao: await signUrl(vis.doc_procuracao_path),
+      proprietario: await signUrl(vis.doc_proprietario_path),
+    };
+
+    const itensComUrl = await Promise.all(
+      (itens ?? []).map(async (item: any) => ({
+        ...item,
+        foto_url: await signUrl(item.foto_path),
+      })),
+    );
+
+    const cli = (vis as any).clientes_entrega_santorini;
+    const slot = (vis as any).entrega_slot;
+
+    return c.json({
+      ok: true,
+      vistoria: {
+        id: vis.id,
+        status: vis.status,
+        tipo_representante: vis.tipo_representante,
+        docs_validados_em: vis.docs_validados_em,
+        iniciada_em: vis.iniciada_em,
+        concluida_em: vis.concluida_em,
+      },
+      cliente: {
+        nome: cli?.cliente,
+        bloco: cli?.bloco,
+        unidade: cli?.unidade,
+        cpf: cli?.cpf_cnpj,
+        telefone: cli?.telefone,
+        email: cli?.email,
+      },
+      slot: {
+        data: slot?.data,
+        hora_inicio: slot?.hora_inicio,
+        hora_fim: slot?.hora_fim,
+      },
+      docs: docUrls,
+      itens: itensComUrl,
+    });
+  } catch (err) {
+    console.error("❌ GET /entregas/vistoria:", err);
+    return c.json({ ok: false, error: "Erro ao buscar vistoria" }, 500);
+  }
+});
+
+// ───────────────────────────────────────────────────────────────────
+// POST /entregas/vistoria/:id/iniciar
+// Muda status para vistoria_em_andamento
+// ───────────────────────────────────────────────────────────────────
+entregasRoutes.post("/entregas/vistoria/:id/iniciar", async (c) => {
+  try {
+    const vistoriaId = c.req.param("id");
+    const supabase = getSupabase();
+
+    const { error } = await supabase
+      .from("vistoria_entrega")
+      .update({
+        status: "vistoria_em_andamento",
+        iniciada_em: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", vistoriaId)
+      .eq("status", "docs_validados");
+
+    if (error) throw error;
+    return c.json({ ok: true });
+  } catch (err) {
+    console.error("❌ /entregas/vistoria/iniciar:", err);
+    return c.json({ ok: false, error: "Erro ao iniciar vistoria" }, 500);
+  }
+});
+
+// ───────────────────────────────────────────────────────────────────
+// POST /entregas/vistoria/:id/item
+// Atualiza item do checklist (aceito, observação, foto)
+// Body: { item_key, aceito, observacao?, foto_base64? }
+// ───────────────────────────────────────────────────────────────────
+entregasRoutes.post("/entregas/vistoria/:id/item", async (c) => {
+  try {
+    const vistoriaId = c.req.param("id");
+    const body = await c.req.json();
+    const itemKey = body?.item_key as string;
+    const aceito = body?.aceito as boolean | undefined;
+    const observacao = body?.observacao as string | undefined;
+    const fotoBase64 = body?.foto_base64 as string | undefined;
+
+    if (!itemKey)
+      return c.json({ ok: false, error: "item_key obrigatório" }, 400);
+
+    const supabase = getSupabase();
+
+    // Upload da foto se enviada
+    let fotoPath: string | undefined;
+    if (fotoBase64) {
+      await ensureRecBucket();
+      const raw = fotoBase64.includes(",") ? fotoBase64.split(",")[1] : fotoBase64;
+      const bytes = Uint8Array.from(atob(raw), (ch) => ch.charCodeAt(0));
+      const ext = fotoBase64.startsWith("data:image/png") ? "png" : "jpg";
+      fotoPath = `${vistoriaId}/itens/${itemKey}_${Date.now()}.${ext}`;
+
+      const { error: upErr } = await supabase.storage
+        .from(BUCKET_RECEBIMENTO)
+        .upload(fotoPath, bytes, { contentType: `image/${ext}`, upsert: true });
+
+      if (upErr) throw upErr;
+    }
+
+    // Monta update
+    const update: Record<string, any> = {
+      atualizado_em: new Date().toISOString(),
+    };
+    if (aceito !== undefined) update.aceito = aceito;
+    if (observacao !== undefined) update.observacao = observacao;
+    if (fotoPath) update.foto_path = fotoPath;
+
+    const { data, error } = await supabase
+      .from("vistoria_entrega_item")
+      .update(update)
+      .eq("vistoria_id", vistoriaId)
+      .eq("item_key", itemKey)
+      .select("id, item_key, aceito, observacao, foto_path")
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data)
+      return c.json({ ok: false, error: "Item não encontrado" }, 404);
+
+    // Gera URL assinada da foto
+    let fotoUrl = null;
+    if (data.foto_path) {
+      const { data: signed } = await supabase.storage
+        .from(BUCKET_RECEBIMENTO)
+        .createSignedUrl(data.foto_path, 24 * 60 * 60);
+      fotoUrl = signed?.signedUrl ?? null;
+    }
+
+    return c.json({ ok: true, item: { ...data, foto_url: fotoUrl } });
+  } catch (err) {
+    console.error("❌ /entregas/vistoria/item:", err);
+    return c.json({ ok: false, error: "Erro ao atualizar item" }, 500);
+  }
+});
+
+// ───────────────────────────────────────────────────────────────────
+// POST /entregas/vistoria/:id/concluir
+// Finaliza a vistoria (valida que todos os itens têm status + foto)
+// ───────────────────────────────────────────────────────────────────
+entregasRoutes.post("/entregas/vistoria/:id/concluir", async (c) => {
+  try {
+    const vistoriaId = c.req.param("id");
+    const supabase = getSupabase();
+
+    // Valida se todos os itens estão preenchidos
+    const { data: itens, error: errItens } = await supabase
+      .from("vistoria_entrega_item")
+      .select("item_key, aceito, foto_path")
+      .eq("vistoria_id", vistoriaId);
+
+    if (errItens) throw errItens;
+
+    const pendentes = (itens ?? []).filter(
+      (i: any) => i.aceito === null || !i.foto_path,
+    );
+
+    if (pendentes.length > 0) {
+      return c.json({
+        ok: false,
+        error: `${pendentes.length} item(ns) pendente(s)`,
+        pendentes: pendentes.map((i: any) => i.item_key),
+      }, 400);
+    }
+
+    const { error } = await supabase
+      .from("vistoria_entrega")
+      .update({
+        status: "concluida",
+        concluida_em: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", vistoriaId);
+
+    if (error) throw error;
+    return c.json({ ok: true });
+  } catch (err) {
+    console.error("❌ /entregas/vistoria/concluir:", err);
+    return c.json({ ok: false, error: "Erro ao concluir vistoria" }, 500);
+  }
+});

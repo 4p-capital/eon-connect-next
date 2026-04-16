@@ -35,26 +35,31 @@ const supabase = new Proxy({} as ReturnType<typeof createClient>, {
 // 📦 BUCKET SUPABASE STORAGE - Termos de Assistência Técnica (PDFs)
 // ═══════════════════════════════════════════════════════════════════
 const BUCKET_TERMOS = 'make-a8708d5d-termos-assistencia';
+export const BUCKET_RECEBIMENTO = 'entrega-recebimento';
 
-// 🔥 OTIMIZAÇÃO: Bucket criado sob demanda (lazy) em vez de no startup
-let _bucketChecked = false;
-async function ensureBucketExists() {
-  if (_bucketChecked) return;
+// 🔥 OTIMIZAÇÃO: Buckets criados sob demanda (lazy) em vez de no startup
+const _bucketsChecked = new Set<string>();
+async function ensureBucketExistsByName(bucketName: string) {
+  if (_bucketsChecked.has(bucketName)) return;
   try {
     const { data: buckets } = await supabase.storage.listBuckets();
-    const bucketExists = buckets?.some((bucket: any) => bucket.name === BUCKET_TERMOS);
+    const bucketExists = buckets?.some((bucket: any) => bucket.name === bucketName);
     if (!bucketExists) {
-      const { error } = await supabase.storage.createBucket(BUCKET_TERMOS, { public: false });
+      const { error } = await supabase.storage.createBucket(bucketName, { public: false });
       if (error) {
-        console.error('❌ Erro ao criar bucket de termos:', error);
+        console.error(`❌ Erro ao criar bucket "${bucketName}":`, error);
       } else {
-        console.log(`✅ Bucket "${BUCKET_TERMOS}" criado com sucesso`);
+        console.log(`✅ Bucket "${bucketName}" criado com sucesso`);
       }
     }
-    _bucketChecked = true;
+    _bucketsChecked.add(bucketName);
   } catch (err) {
-    console.error('❌ Erro na verificação do bucket:', err);
+    console.error(`❌ Erro na verificação do bucket "${bucketName}":`, err);
   }
+}
+
+async function ensureBucketExists() {
+  await ensureBucketExistsByName(BUCKET_TERMOS);
 }
 
 // ═══════════════════════════════════════════════════════════════════

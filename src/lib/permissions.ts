@@ -28,6 +28,7 @@ export type UserPermissions = {
       view?: boolean;
       pendencias?: boolean;
       agendamentos?: boolean;
+      recebimento?: boolean;
     };
   };
 };
@@ -124,6 +125,7 @@ export const PERMISSION_TREE: PermissionTreeNode[] = [
         children: [
           { key: 'pendencias', label: 'Pendências' },
           { key: 'agendamentos', label: 'Agendamentos' },
+          { key: 'recebimento', label: 'Recebimento / Vistoria' },
         ],
       },
     ],
