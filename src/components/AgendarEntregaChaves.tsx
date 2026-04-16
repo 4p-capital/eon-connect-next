@@ -307,9 +307,9 @@ export function AgendarEntregaChaves() {
     }
   }, [cpfDigits, slotProvisorio, carregarDisponibilidade]);
 
-  // Cancelar reserva
-  const handleCancelar = useCallback(async () => {
-    if (!confirm("Tem certeza que deseja cancelar seu agendamento?")) return;
+  // Cancelar reserva e reagendar — cancela no banco e leva ao calendário
+  const handleCancelarEReagendar = useCallback(async () => {
+    if (!confirm("Tem certeza que deseja cancelar e escolher um novo horário?")) return;
     setLoading(true);
     setErro(null);
     try {
@@ -321,26 +321,16 @@ export function AgendarEntregaChaves() {
       const data = await resp.json();
       if (!data.ok) throw new Error(data.error || "Erro ao cancelar");
       setReserva(null);
+      setDiaSelecionado(null);
       await carregarDisponibilidade();
       setEtapa("calendar");
     } catch (err) {
       console.error(err);
-      setErro("Erro ao cancelar reserva.");
+      setErro("Erro ao cancelar reserva. Tente novamente.");
     } finally {
       setLoading(false);
     }
   }, [cpfDigits, carregarDisponibilidade]);
-
-  // Voltar para escolher um novo horário (remarcar)
-  const handleRemarcarVoltar = useCallback(async () => {
-    setLoading(true);
-    try {
-      await carregarDisponibilidade();
-      setEtapa("calendar");
-    } finally {
-      setLoading(false);
-    }
-  }, [carregarDisponibilidade]);
 
   // Reset total
   const handleVoltarInicio = useCallback(() => {
@@ -853,22 +843,13 @@ export function AgendarEntregaChaves() {
                   Você receberá um lembrete por WhatsApp em breve.
                 </p>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={handleRemarcarVoltar}
-                    disabled={loading}
-                    className="py-3 rounded-xl border border-[var(--border)] text-sm font-medium hover:bg-[var(--background-alt)] transition-all disabled:opacity-50"
-                  >
-                    Remarcar
-                  </button>
-                  <button
-                    onClick={handleCancelar}
-                    disabled={loading}
-                    className="py-3 rounded-xl border border-red-200 text-sm font-medium text-red-700 hover:bg-red-50 transition-all disabled:opacity-50"
-                  >
-                    Cancelar
-                  </button>
-                </div>
+                <button
+                  onClick={handleCancelarEReagendar}
+                  disabled={loading}
+                  className="w-full py-3 rounded-xl border border-[var(--border)] text-sm font-medium hover:bg-[var(--background-alt)] transition-all disabled:opacity-50"
+                >
+                  {loading ? "Cancelando..." : "Cancelar e Reagendar"}
+                </button>
               </div>
             </div>
 
