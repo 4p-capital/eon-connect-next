@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   KeyRound,
   Loader2,
@@ -14,6 +14,7 @@ import {
 import { QRCodeDots } from "@/components/QRCodeDots";
 import { Calendar } from "@/components/ui/calendar";
 import { projectId, publicAnonKey } from "@/utils/supabase/info";
+import { getSupabaseClient } from "@/utils/supabase/client";
 
 // ═══════════════════════════════════════════════════════════════════
 // Tela pública /agendar — fluxo de agendamento de entrega de chaves
@@ -354,6 +355,32 @@ export function AgendarEntregaChaves() {
   }, []);
 
   // ───────────────────────────────────────────────────────────────
+  // Realtime: escuta mudanças na tabela entrega_slot para atualizar
+  // a disponibilidade em tempo real enquanto o cliente escolhe horário
+  // ───────────────────────────────────────────────────────────────
+  const carregarRef = useRef(carregarDisponibilidade);
+  carregarRef.current = carregarDisponibilidade;
+
+  useEffect(() => {
+    if (etapa !== "calendar" && etapa !== "horario") return;
+
+    const supabase = getSupabaseClient();
+    const channel = supabase
+      .channel("entrega_slot_realtime")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "entrega_slot" },
+        () => {
+          carregarRef.current();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [etapa]);
+
   return (
     <div className="min-h-screen bg-[var(--background-alt)]">
       {/* Header */}

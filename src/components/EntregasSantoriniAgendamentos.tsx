@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarCheck,
   Search,
@@ -174,6 +174,29 @@ export function EntregasSantoriniAgendamentos() {
     if (!hasPermission) return;
     fetchSlots();
   }, [hasPermission, fetchSlots]);
+
+  // Realtime: atualiza automaticamente quando alguém reserva/cancela um slot
+  const fetchSlotsRef = useRef(fetchSlots);
+  fetchSlotsRef.current = fetchSlots;
+
+  useEffect(() => {
+    if (!hasPermission) return;
+    const supabase = getSupabaseClient();
+    const channel = supabase
+      .channel("admin_entrega_slot_realtime")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "entrega_slot" },
+        () => {
+          fetchSlotsRef.current();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [hasPermission]);
 
   // Agrupar por dia
   const diasAgrupados = useMemo(() => {
