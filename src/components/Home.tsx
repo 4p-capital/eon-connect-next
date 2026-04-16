@@ -10,7 +10,7 @@ import { motion } from 'motion/react';
 import eonLogo from '@/assets/0d61051e7e3d9184d675cfec8b0341c5383f7b2a.png';
 
 export function Home() {
-  const { userData, loading } = useUser();
+  const { userData, loading, hasPermission } = useUser();
   const { userName } = useAuth();
   const router = useRouter();
 
@@ -21,10 +21,11 @@ export function Home() {
 
   // Verificar se tem alguma permissão
   const hasAnyPermission = userData && (
-    userData.menu_assistencia ||
-    userData.menu_gerenciamento ||
-    userData.menu_cadastro ||
-    userData.menu_notificacoes
+    hasPermission('assistencia') ||
+    hasPermission('gerenciamento') ||
+    hasPermission('cadastros') ||
+    hasPermission('notificacoes') ||
+    hasPermission('entregas')
   );
 
   if (loading) {
@@ -91,7 +92,7 @@ export function Home() {
             </div>
 
             <div className="p-4 border-t border-gray-200 text-center">
-              <p className="text-xs text-gray-400">ID do Usuário: {String(userData?.id).slice(0, 8)}</p>
+              <p className="text-xs text-gray-400">ID do Usuário: {userData?.id ? String(userData.id).slice(0, 8) : 'Indisponível'}</p>
             </div>
           </div>
         </motion.div>
@@ -109,7 +110,7 @@ export function Home() {
       iconColor: 'text-orange-600',
       iconBg: 'bg-orange-50',
       route: 'gerenciamento-assistencia',
-      enabled: userData?.menu_assistencia || false
+      enabled: hasPermission('assistencia')
     },
     {
       id: 'cadastros',
@@ -119,7 +120,7 @@ export function Home() {
       iconColor: 'text-gray-900',
       iconBg: 'bg-gray-100',
       route: 'cadastros',
-      enabled: userData?.menu_cadastro || false
+      enabled: hasPermission('cadastros')
     },
     {
       id: 'notificacoes',
@@ -129,7 +130,7 @@ export function Home() {
       iconColor: 'text-blue-600',
       iconBg: 'bg-blue-50',
       route: 'notificacoes-fornecedor',
-      enabled: userData?.menu_notificacoes || false
+      enabled: hasPermission('notificacoes')
     },
     {
       id: 'gerenciamento',
@@ -139,7 +140,7 @@ export function Home() {
       iconColor: 'text-emerald-600',
       iconBg: 'bg-emerald-50',
       route: 'gerenciamento',
-      enabled: userData?.menu_gerenciamento || false
+      enabled: hasPermission('gerenciamento')
     }
   ];
 

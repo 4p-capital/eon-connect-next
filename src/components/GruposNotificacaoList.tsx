@@ -30,7 +30,7 @@ interface GrupoNotificacao {
 }
 
 export function GruposNotificacaoList() {
-  usePermissionGuard("menu_notificacoes");
+  usePermissionGuard("notificacoes.grupos");
   const [grupos, setGrupos] = useState<GrupoNotificacao[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");

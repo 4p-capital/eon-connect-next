@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Users, Shield, Search, Loader2, AlertCircle, Package } from 'lucide-react';
+import { Users, Shield, Search, Loader2, AlertCircle, Package, KeyRound } from 'lucide-react';
 import { usePermissionGuard } from '@/hooks/usePermissionGuard';
 import { projectId, publicAnonKey } from '@/utils/supabase/info';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { GerenciarMateriais } from '@/components/GerenciarMateriais';
 import { withRetry } from '@/utils/errorHandler';
+import { PermissionsDrawer } from '@/components/PermissionsDrawer';
+import type { UserPermissions } from '@/lib/permissions';
 
 interface User {
   id: number;
@@ -18,6 +20,8 @@ interface User {
   nivel_permissao: string;
   created_at: string;
   ativo: boolean;
+  permissions: UserPermissions;
+  // legado — só pra não quebrar linhas antigas da tabela enquanto migramos
   menu_assistencia: boolean;
   menu_gerenciamento: boolean;
   menu_cadastro: boolean;
@@ -33,10 +37,12 @@ export function Gerenciamento() {
   const [updatingUser, setUpdatingUser] = useState<number | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<string>('');
+  const [permissionsUser, setPermissionsUser] = useState<User | null>(null);
+  const [savingPermissions, setSavingPermissions] = useState(false);
 
   // 🔒 Proteção de acesso - Requer permissão menu_gerenciamento
   const { hasPermission, loading: permissionLoading } = usePermissionGuard(
-    'menu_gerenciamento'
+    'gerenciamento'
   );
 
   // ✅ useEffect DEVE vir ANTES do early return
@@ -149,6 +155,47 @@ export function Gerenciamento() {
       setSyncResult('❌ Erro ao sincronizar usuários');
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const savePermissions = async (userId: number, permissions: UserPermissions) => {
+    try {
+      setSavingPermissions(true);
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/users/${userId}/permissions`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`,
+          },
+          body: JSON.stringify({ permissions }),
+        }
+      );
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Erro ao salvar permissões');
+      }
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === userId
+            ? {
+                ...u,
+                permissions,
+                menu_assistencia: permissions?.assistencia?.view === true,
+                menu_gerenciamento: permissions?.gerenciamento?.view === true,
+                menu_cadastro: permissions?.cadastros?.view === true,
+                menu_notificacoes: permissions?.notificacoes?.view === true,
+              }
+            : u,
+        ),
+      );
+      setPermissionsUser(null);
+    } catch (err) {
+      console.error('❌ Erro ao salvar permissões:', err);
+      alert(`Erro ao salvar permissões: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
+    } finally {
+      setSavingPermissions(false);
     }
   };
 
@@ -313,10 +360,7 @@ export function Gerenciamento() {
                       <th className="px-6 py-4 text-left text-sm text-gray-600 whitespace-nowrap">CPF</th>
                       <th className="px-6 py-4 text-left text-sm text-gray-600 whitespace-nowrap">Telefone</th>
                       <th className="px-6 py-4 text-center text-sm text-gray-600 whitespace-nowrap">Ativo</th>
-                      <th className="px-6 py-4 text-center text-sm text-gray-600 whitespace-nowrap">Assistência</th>
-                      <th className="px-6 py-4 text-center text-sm text-gray-600 whitespace-nowrap">Gerenciamento</th>
-                      <th className="px-6 py-4 text-center text-sm text-gray-600 whitespace-nowrap">Cadastro</th>
-                      <th className="px-6 py-4 text-center text-sm text-gray-600 whitespace-nowrap">Notificações</th>
+                      <th className="px-6 py-4 text-center text-sm text-gray-600 whitespace-nowrap">Permissões</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E5E7EB]">
@@ -356,78 +400,15 @@ export function Gerenciamento() {
                           </div>
                         </td>
                         
-                        {/* Toggle Assistência */}
+                        {/* Botão Permissões */}
                         <td className="px-6 py-4">
                           <div className="flex justify-center">
                             <button
-                              onClick={() => updatePermission(user.id, 'menu_assistencia', !user.menu_assistencia)}
-                              disabled={updatingUser === user.id}
-                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                                user.menu_assistencia ? 'bg-black' : 'bg-[#E5E7EB]'
-                              } ${updatingUser === user.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              onClick={() => setPermissionsUser(user)}
+                              className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                             >
-                              <span
-                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                  user.menu_assistencia ? 'translate-x-6' : 'translate-x-1'
-                                }`}
-                              />
-                            </button>
-                          </div>
-                        </td>
-                        
-                        {/* Toggle Gerenciamento */}
-                        <td className="px-6 py-4">
-                          <div className="flex justify-center">
-                            <button
-                              onClick={() => updatePermission(user.id, 'menu_gerenciamento', !user.menu_gerenciamento)}
-                              disabled={updatingUser === user.id}
-                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                                user.menu_gerenciamento ? 'bg-black' : 'bg-[#E5E7EB]'
-                              } ${updatingUser === user.id ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            >
-                              <span
-                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                  user.menu_gerenciamento ? 'translate-x-6' : 'translate-x-1'
-                                }`}
-                              />
-                            </button>
-                          </div>
-                        </td>
-                        
-                        {/* Toggle Cadastro */}
-                        <td className="px-6 py-4">
-                          <div className="flex justify-center">
-                            <button
-                              onClick={() => updatePermission(user.id, 'menu_cadastro', !user.menu_cadastro)}
-                              disabled={updatingUser === user.id}
-                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                                user.menu_cadastro ? 'bg-black' : 'bg-[#E5E7EB]'
-                              } ${updatingUser === user.id ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            >
-                              <span
-                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                  user.menu_cadastro ? 'translate-x-6' : 'translate-x-1'
-                                }`}
-                              />
-                            </button>
-                          </div>
-                        </td>
-
-                        {/* Toggle Notificações */}
-                        <td className="px-6 py-4">
-                          <div className="flex justify-center">
-                            <button
-                              onClick={() => updatePermission(user.id, 'menu_notificacoes', !user.menu_notificacoes)}
-                              disabled={updatingUser === user.id}
-                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                                user.menu_notificacoes ? 'bg-black' : 'bg-[#E5E7EB]'
-                              } ${updatingUser === user.id ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            >
-                              <span
-                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                  user.menu_notificacoes ? 'translate-x-6' : 'translate-x-1'
-                                }`}
-                              />
+                              <KeyRound className="h-4 w-4" />
+                              Editar
                             </button>
                           </div>
                         </td>
@@ -505,6 +486,17 @@ export function Gerenciamento() {
 
         </Tabs>
       </div>
+
+      <PermissionsDrawer
+        open={permissionsUser !== null}
+        userName={permissionsUser?.nome ?? ''}
+        initialPermissions={permissionsUser?.permissions ?? {}}
+        saving={savingPermissions}
+        onClose={() => setPermissionsUser(null)}
+        onSave={(perms) => {
+          if (permissionsUser) savePermissions(permissionsUser.id, perms);
+        }}
+      />
     </div>
   );
 }

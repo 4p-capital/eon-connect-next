@@ -4,29 +4,27 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/contexts/UserContext';
 
-type PermissionType = 'menu_assistencia' | 'menu_gerenciamento' | 'menu_planejamento' | 'menu_cadastro' | 'menu_notificacoes';
-
 /**
- * Hook para proteger páginas baseado em permissões
- * Redireciona para home se o usuário não tiver a permissão necessária
+ * Hook para proteger páginas baseado em permissões.
+ * Aceita dot-notation (ex: "entregas.santorini.pendencias") ou chave de menu ("gerenciamento").
+ * Redireciona para home se o usuário não tiver a permissão necessária.
  */
-export function usePermissionGuard(requiredPermission: PermissionType) {
-  const { userData, loading } = useUser();
+export function usePermissionGuard(requiredPermission: string) {
+  const { userData, loading, hasPermission } = useUser();
   const router = useRouter();
 
-  useEffect(() => {
-    // Aguardar o carregamento dos dados
-    if (loading) return;
+  const allowed = hasPermission(requiredPermission);
 
-    // Se não tem os dados do usuário ou não tem a permissão, redirecionar
-    if (!userData || !userData[requiredPermission]) {
-      console.log(`🚫 Acesso negado: Permissão "${requiredPermission}" não concedida. Redirecionando para home...`);
+  useEffect(() => {
+    if (loading) return;
+    if (!userData || !allowed) {
+      console.log(`🚫 Acesso negado: "${requiredPermission}". Redirecionando para home...`);
       router.push('/');
     }
-  }, [userData, loading, requiredPermission, router]);
+  }, [userData, loading, allowed, requiredPermission, router]);
 
   return {
-    hasPermission: userData?.[requiredPermission] || false,
-    loading
+    hasPermission: allowed,
+    loading,
   };
 }

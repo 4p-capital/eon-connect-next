@@ -11,12 +11,15 @@ import {
 import { getSupabaseClient } from "@/utils/supabase/client";
 import { apiBaseUrl, publicAnonKey } from "@/utils/supabase/info";
 import { withRetry } from "@/utils/errorHandler";
+import { hasPermission as checkPermission, type UserPermissions } from "@/lib/permissions";
 
 export interface UserData {
   id: number;
   nome: string;
   email: string;
   ativo: boolean;
+  permissions: UserPermissions;
+  // Legado — mantido para compatibilidade enquanto a UI migra para `permissions`.
   menu_assistencia: boolean;
   menu_gerenciamento: boolean;
   menu_planejamento: boolean;
@@ -27,6 +30,7 @@ export interface UserData {
 interface UserContextType {
   userData: UserData | null;
   loading: boolean;
+  hasPermission: (path: string) => boolean;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -106,7 +110,11 @@ export function UserProvider({
   }, [authUuid]);
 
   const value = useMemo<UserContextType>(
-    () => ({ userData, loading }),
+    () => ({
+      userData,
+      loading,
+      hasPermission: (path: string) => checkPermission(userData?.permissions, path),
+    }),
     [userData, loading]
   );
 

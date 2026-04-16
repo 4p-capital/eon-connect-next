@@ -73,7 +73,7 @@ interface Metrics {
 const LIMIT_OPTIONS = [50, 100, 200] as const;
 
 export function NotificacoesFornecedorList() {
-  usePermissionGuard("menu_notificacoes");
+  usePermissionGuard("notificacoes.pedidos");
   const [eventos, setEventos] = useState<EventoPedido[]>([]);
   const [statusMap, setStatusMap] = useState<Record<string, StatusByEvento>>({});
   const [metrics, setMetrics] = useState<Metrics | null>(null);

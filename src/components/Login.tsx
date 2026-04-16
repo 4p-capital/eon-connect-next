@@ -76,7 +76,7 @@ export function Login({ onLogin, onNavigateToSignUp, onNavigateToReset, onWaitin
         // Buscar dados do usuário pela tabela User, incluindo permissões
         const { data: userDataFromDB, error: userError } = await (supabase
           .from('User') as ReturnType<typeof supabase.from>)
-          .select('nome, ativo, menu_assistencia, menu_gerenciamento, menu_planejamento')
+          .select('nome, ativo, menu_assistencia, menu_gerenciamento, menu_planejamento, menu_cadastro, menu_notificacoes, permissions')
           .eq('auth_user_id', data.user.id)
           .maybeSingle();
 
@@ -93,11 +93,16 @@ export function Login({ onLogin, onNavigateToSignUp, onNavigateToReset, onWaitin
             return;
           }
 
-          // Verificar se todas as permissões estão false
+          // Verificar se tem qualquer permissão (legado OR nova estrutura jsonb)
+          const p = (userDataFromDB as { permissions?: Record<string, { view?: boolean }> }).permissions;
+          const temPermissaoNova = !!p && Object.values(p).some((m) => m?.view === true);
           const todasPermissoesFalse =
+            !temPermissaoNova &&
             !userDataFromDB.menu_assistencia &&
             !userDataFromDB.menu_gerenciamento &&
-            !userDataFromDB.menu_planejamento;
+            !userDataFromDB.menu_planejamento &&
+            !userDataFromDB.menu_cadastro &&
+            !userDataFromDB.menu_notificacoes;
 
           if (todasPermissoesFalse) {
             // Salvar informações do usuário no localStorage antes de redirecionar

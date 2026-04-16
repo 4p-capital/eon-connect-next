@@ -2,6 +2,7 @@ import { Hono } from "npm:hono@4";
 import { cors } from "npm:hono/cors";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { cadastrosRoutes } from "./cadastros.tsx";
+import { entregasRoutes } from "./entregas.tsx";
 // 🔥 OTIMIZAÇÃO DE MEMÓRIA v3: whatsapp, chat, scheduler, openai carregados sob demanda (lazy-load)
 
 const app = new Hono();
@@ -134,6 +135,7 @@ app.use('*', async (c, next) => {
 
 // 📦 Módulo eager (leve, usa apenas kv_store):
 app.route("/make-server-a8708d5d", cadastrosRoutes);
+app.route("/make-server-a8708d5d", entregasRoutes);
 
 // 🔥 OTIMIZAÇÃO DE MEMÓRIA v3: Todos os outros módulos carregados sob demanda (lazy-load)
 // Cada rota faz dynamic import apenas quando acessada, economizando ~2000+ linhas no startup
@@ -2498,7 +2500,7 @@ app.get("/make-server-a8708d5d/users/all", async (c) => {
     const { data, error } = await queryWithTimeout(
       supabase
         .from('User')
-        .select('id, nome, email, cpf, telefone, idempresa, nivel_permissao, created_at, ativo, menu_assistencia, menu_gerenciamento, menu_planejamento, menu_cadastro, menu_notificacoes')
+        .select('id, nome, email, cpf, telefone, idempresa, nivel_permissao, created_at, ativo, menu_assistencia, menu_gerenciamento, menu_planejamento, menu_cadastro, menu_notificacoes, permissions')
         .order('created_at', { ascending: false })
         .limit(50) // MÁXIMO ABSOLUTO: 50 usuários
     );
@@ -2540,7 +2542,7 @@ app.get("/make-server-a8708d5d/users/me", async (c) => {
     let result = await queryWithTimeout(
       supabase
         .from('User')
-        .select('id, nome, email, auth_user_id, ativo, menu_assistencia, menu_gerenciamento, menu_planejamento, menu_cadastro, menu_notificacoes')
+        .select('id, nome, email, auth_user_id, ativo, menu_assistencia, menu_gerenciamento, menu_planejamento, menu_cadastro, menu_notificacoes, permissions')
         .eq('auth_user_id', authUuid)
         .maybeSingle()
     );
@@ -2562,7 +2564,7 @@ app.get("/make-server-a8708d5d/users/me", async (c) => {
         result = await queryWithTimeout(
           supabase
             .from('User')
-            .select('id, nome, email, auth_user_id, ativo, menu_assistencia, menu_gerenciamento, menu_planejamento, menu_cadastro, menu_notificacoes')
+            .select('id, nome, email, auth_user_id, ativo, menu_assistencia, menu_gerenciamento, menu_planejamento, menu_cadastro, menu_notificacoes, permissions')
             .eq('email', email)
             .maybeSingle()
         );
@@ -2629,6 +2631,18 @@ app.patch("/make-server-a8708d5d/users/:id/permissions", async (c) => {
     if (body.menu_cadastro !== undefined) updateData.menu_cadastro = body.menu_cadastro;
     if (body.menu_notificacoes !== undefined) updateData.menu_notificacoes = body.menu_notificacoes;
     if (body.ativo !== undefined) updateData.ativo = body.ativo;
+
+    // Novo: permissions JSONB. Quando enviado, sincroniza as colunas menu_* legadas
+    // a partir do campo .view de cada menu, mantendo compatibilidade.
+    if (body.permissions !== undefined && body.permissions !== null && typeof body.permissions === 'object') {
+      updateData.permissions = body.permissions;
+      const p = body.permissions;
+      updateData.menu_assistencia = p?.assistencia?.view === true;
+      updateData.menu_gerenciamento = p?.gerenciamento?.view === true;
+      updateData.menu_planejamento = p?.planejamento?.view === true;
+      updateData.menu_cadastro = p?.cadastros?.view === true;
+      updateData.menu_notificacoes = p?.notificacoes?.view === true;
+    }
     
     console.log(`📝 Dados para atualizar:`, updateData);
     
@@ -3231,15 +3245,17 @@ app.post("/make-server-a8708d5d/signup", async (c) => {
       }, 400);
     }
 
-    // 1. Criar usuário no Supabase Auth
-    // IMPORTANTE: email_confirm: false requer configuração de SMTP no Supabase
-    // Se SMTP não estiver configurado, use a confirmação manual na tela "Verifique Email"
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+    // 1. Criar usuário via fluxo público de signUp (dispara email de confirmação via SMTP do Supabase).
+    // admin.createUser NÃO envia email — por isso usamos o client anon aqui.
+    const anonClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+    );
+    const { data: authData, error: authError } = await anonClient.auth.signUp({
       email: body.email,
       password: body.password,
-      email_confirm: false, // ❌ NÃO auto-confirmar - enviar email de confirmação
-      user_metadata: {
-        name: body.nome
+      options: {
+        data: { name: body.nome }
       }
     });
 
@@ -3279,6 +3295,14 @@ app.post("/make-server-a8708d5d/signup", async (c) => {
         menu_assistencia: false,
         menu_gerenciamento: false,
         menu_planejamento: false,
+        permissions: {
+          assistencia: { view: false, gerenciar: false, whatsapp: false, termos: false },
+          cadastros: { view: false, cadastros: false, clientes: false },
+          notificacoes: { view: false, pedidos: false, historico_fornecedores: false, historico_grupos: false, grupos: false },
+          gerenciamento: { view: false },
+          planejamento: { view: false },
+          entregas: { view: false, santorini: { view: false, pendencias: false, agendamentos: false } },
+        },
         ativo: true,
         created_at: new Date().toISOString()
       }])

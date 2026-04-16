@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import {
   Wrench, Menu, X, ChevronLeft, ChevronDown, LogOut, Users,
   FolderOpen, LayoutDashboard, MessageCircle, Sparkles, UserCircle, FileText, Bell, Users2, List, BarChart3,
+  Key, Building2, ClipboardList, CalendarCheck,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useRouter, usePathname } from 'next/navigation';
@@ -16,6 +17,8 @@ interface SubMenuItem {
   id: string;
   icon: LucideIcon;
   label: string;
+  permission?: string;
+  children?: SubMenuItem[];
 }
 
 interface MenuItem {
@@ -23,6 +26,7 @@ interface MenuItem {
   icon: LucideIcon;
   label: string;
   visible: boolean;
+  permission?: string;
   children?: SubMenuItem[];
 }
 
@@ -34,7 +38,7 @@ export function Sidebar({ onWidthChange }: SidebarProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
-  const { userData, loading } = useUser();
+  const { userData, loading, hasPermission } = useUser();
   const { logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
@@ -44,16 +48,24 @@ export function Sidebar({ onWidthChange }: SidebarProps) {
     return pathname.substring(1);
   })();
 
-  // Auto-expand parent menu when a child route is active
+  // Auto-expand parent menus quando a rota ativa está em algum descendente
   useEffect(() => {
-    menuItems.forEach((item) => {
-      if (item.children) {
-        const hasActiveChild = item.children.some((child) => currentRoute === child.id);
-        if (hasActiveChild && !expandedMenus.includes(item.id)) {
-          setExpandedMenus((prev) => [...prev, item.id]);
+    const toExpand: string[] = [];
+    const walk = (nodes: (MenuItem | SubMenuItem)[], ancestors: string[]) => {
+      for (const n of nodes) {
+        if (currentRoute === n.id && ancestors.length > 0) {
+          toExpand.push(...ancestors);
         }
+        if (n.children) walk(n.children, [...ancestors, n.id]);
       }
-    });
+    };
+    walk(menuItems, []);
+    if (toExpand.length > 0) {
+      setExpandedMenus((prev) => {
+        const merged = new Set([...prev, ...toExpand]);
+        return Array.from(merged);
+      });
+    }
   }, [currentRoute]);
 
   useEffect(() => {
@@ -79,7 +91,7 @@ export function Sidebar({ onWidthChange }: SidebarProps) {
     );
   };
 
-  const menuItems: MenuItem[] = [
+  const rawMenu: MenuItem[] = [
     {
       id: 'home',
       icon: LayoutDashboard,
@@ -90,68 +102,54 @@ export function Sidebar({ onWidthChange }: SidebarProps) {
       id: 'assistencia',
       icon: Wrench,
       label: 'Assistência',
-      visible: userData?.menu_assistencia === true,
+      visible: hasPermission('assistencia'),
+      permission: 'assistencia',
       children: [
-        {
-          id: 'gerenciamento-assistencia',
-          icon: Wrench,
-          label: 'Gerenciar',
-        },
-        {
-          id: 'whatsapp-chats',
-          icon: MessageCircle,
-          label: 'WhatsApp',
-        },
-        {
-          id: 'termos-assistencia',
-          icon: FileText,
-          label: 'Termos',
-        },
+        { id: 'gerenciamento-assistencia', icon: Wrench, label: 'Gerenciar', permission: 'assistencia.gerenciar' },
+        { id: 'whatsapp-chats', icon: MessageCircle, label: 'WhatsApp', permission: 'assistencia.whatsapp' },
+        { id: 'termos-assistencia', icon: FileText, label: 'Termos', permission: 'assistencia.termos' },
       ],
     },
     {
       id: 'gestao',
       icon: FolderOpen,
       label: 'Cadastros',
-      visible: userData?.menu_cadastro === true,
+      visible: hasPermission('cadastros'),
+      permission: 'cadastros',
       children: [
-        {
-          id: 'cadastros',
-          icon: FolderOpen,
-          label: 'Cadastros',
-        },
-        {
-          id: 'clientes',
-          icon: UserCircle,
-          label: 'Clientes',
-        },
+        { id: 'cadastros', icon: FolderOpen, label: 'Cadastros', permission: 'cadastros.cadastros' },
+        { id: 'clientes', icon: UserCircle, label: 'Clientes', permission: 'cadastros.clientes' },
       ],
     },
     {
       id: 'notificacoes-fornecedor',
       icon: Bell,
       label: 'Notificações',
-      visible: userData?.menu_notificacoes === true,
+      visible: hasPermission('notificacoes'),
+      permission: 'notificacoes',
+      children: [
+        { id: 'notificacoes-fornecedor', icon: List, label: 'Pedidos', permission: 'notificacoes.pedidos' },
+        { id: 'notificacoes-fornecedor/historico', icon: BarChart3, label: 'Histórico Fornecedores', permission: 'notificacoes.historico_fornecedores' },
+        { id: 'notificacoes-fornecedor/historico-grupos', icon: BarChart3, label: 'Histórico Grupos', permission: 'notificacoes.historico_grupos' },
+        { id: 'notificacoes-fornecedor/grupos', icon: Users2, label: 'Cadastro de Grupos', permission: 'notificacoes.grupos' },
+      ],
+    },
+    {
+      id: 'entregas',
+      icon: Key,
+      label: 'Entregas de Chaves',
+      visible: hasPermission('entregas'),
+      permission: 'entregas',
       children: [
         {
-          id: 'notificacoes-fornecedor',
-          icon: List,
-          label: 'Pedidos',
-        },
-        {
-          id: 'notificacoes-fornecedor/historico',
-          icon: BarChart3,
-          label: 'Histórico Fornecedores',
-        },
-        {
-          id: 'notificacoes-fornecedor/historico-grupos',
-          icon: BarChart3,
-          label: 'Histórico Grupos',
-        },
-        {
-          id: 'notificacoes-fornecedor/grupos',
-          icon: Users2,
-          label: 'Cadastro de Grupos',
+          id: 'entregas/santorini',
+          icon: Building2,
+          label: 'Gran Santorini',
+          permission: 'entregas.santorini',
+          children: [
+            { id: 'entregas/santorini/pendencias', icon: ClipboardList, label: 'Pendências', permission: 'entregas.santorini.pendencias' },
+            { id: 'entregas/santorini/agendamentos', icon: CalendarCheck, label: 'Agendamentos', permission: 'entregas.santorini.agendamentos' },
+          ],
         },
       ],
     },
@@ -159,17 +157,86 @@ export function Sidebar({ onWidthChange }: SidebarProps) {
       id: 'gerenciamento',
       icon: Users,
       label: 'Gerenciamento',
-      visible: userData?.menu_gerenciamento === true,
+      visible: hasPermission('gerenciamento'),
+      permission: 'gerenciamento',
     },
-  ].filter(item => item.visible);
+  ];
+
+  // Filtra recursivamente submenus/nets conforme as permissões do usuário.
+  const filterTree = <T extends { permission?: string; children?: T[] }>(nodes: T[]): T[] =>
+    nodes
+      .filter((n) => !n.permission || hasPermission(n.permission))
+      .map((n) => (n.children ? { ...n, children: filterTree(n.children) } : n));
+
+  const menuItems: MenuItem[] = rawMenu
+    .filter((item) => item.visible)
+    .map((item) => (item.children ? { ...item, children: filterTree(item.children) } : item));
 
   const isRouteActive = (id: string) => currentRoute === id;
 
   const isParentActive = (item: MenuItem) => {
+    const anyDescendantActive = (nodes: SubMenuItem[]): boolean =>
+      nodes.some((c) => currentRoute === c.id || (c.children && anyDescendantActive(c.children)));
     if (item.children) {
-      return item.children.some((child) => currentRoute === child.id) || currentRoute === item.id;
+      return anyDescendantActive(item.children) || currentRoute === item.id;
     }
     return currentRoute === item.id;
+  };
+
+  // ── Render submenu item (recursive, suporta nested children) ──
+
+  const renderSubMenuItem = (child: SubMenuItem): React.ReactNode => {
+    const ChildIcon = child.icon;
+    const hasGrandchildren = child.children && child.children.length > 0;
+    const isChildActive = isRouteActive(child.id);
+    const isOpen = expandedMenus.includes(child.id);
+    const isParent = hasGrandchildren && child.children!.some((g) => isRouteActive(g.id) || (g.children && g.children.some((gg) => isRouteActive(gg.id))));
+
+    if (!hasGrandchildren) {
+      return (
+        <button
+          key={child.id}
+          onClick={() => handleNavigate(child.id)}
+          className={`group relative w-full flex items-center gap-3 px-3 py-2 text-sm font-medium transition-all rounded-lg
+          ${isChildActive
+            ? 'text-gray-900 bg-gray-100'
+            : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+          }`}
+        >
+          <ChildIcon className={`h-4 w-4 flex-shrink-0 ${isChildActive ? 'text-black' : 'text-gray-400 group-hover:text-gray-600'}`} />
+          <span>{child.label}</span>
+        </button>
+      );
+    }
+
+    return (
+      <div key={child.id}>
+        <button
+          onClick={() => toggleSubmenu(child.id)}
+          className={`group relative w-full flex items-center gap-3 px-3 py-2 text-sm font-medium transition-all rounded-lg
+          ${isParent ? 'text-gray-900 bg-gray-100' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}
+        >
+          <ChildIcon className={`h-4 w-4 flex-shrink-0 ${isParent ? 'text-black' : 'text-gray-400 group-hover:text-gray-600'}`} />
+          <span className="flex-1 text-left">{child.label}</span>
+          <ChevronDown className={`h-3.5 w-3.5 text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+        <AnimatePresence>
+          {isOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
+            >
+              <div className="ml-4 pl-4 border-l border-gray-200 mt-1 space-y-0.5">
+                {child.children!.map((grand) => renderSubMenuItem(grand))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
   };
 
   // ── Render menu item (shared between desktop & mobile) ──
@@ -237,25 +304,7 @@ export function Sidebar({ onWidthChange }: SidebarProps) {
                 className="overflow-hidden"
               >
                 <div className="ml-4 pl-4 border-l border-gray-200 mt-1 space-y-0.5">
-                  {item.children!.map((child) => {
-                    const ChildIcon = child.icon;
-                    const isChildActive = isRouteActive(child.id);
-
-                    return (
-                      <button
-                        key={child.id}
-                        onClick={() => handleNavigate(child.id)}
-                        className={`group relative w-full flex items-center gap-3 px-3 py-2 text-sm font-medium transition-all rounded-lg
-                        ${isChildActive
-                          ? 'text-gray-900 bg-gray-100'
-                          : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
-                        }`}
-                      >
-                        <ChildIcon className={`h-4 w-4 flex-shrink-0 ${isChildActive ? 'text-black' : 'text-gray-400 group-hover:text-gray-600'}`} />
-                        <span>{child.label}</span>
-                      </button>
-                    );
-                  })}
+                  {item.children!.map((child) => renderSubMenuItem(child))}
                 </div>
               </motion.div>
             )}

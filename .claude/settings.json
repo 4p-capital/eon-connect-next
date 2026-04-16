@@ -7,7 +7,9 @@
       "Bash(node -e \"const {z} = require\\(''zod''\\); console.log\\(typeof z.object, typeof z.string\\)\")",
       "Bash(npx vitest:*)",
       "WebSearch",
-      "Read(//c/Users/4P/Documents/**)"
+      "Read(//c/Users/4P/Documents/**)",
+      "mcp__clickup__delete_task",
+      "mcp__clickup__create_task"
     ]
   }
 }

@@ -32,7 +32,7 @@ interface GrupoStats {
 }
 
 export function GruposHistoricoList() {
-  usePermissionGuard("menu_notificacoes");
+  usePermissionGuard("notificacoes.historico_grupos");
   const [grupos, setGrupos] = useState<GrupoStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");

@@ -30,7 +30,7 @@ interface FornecedorStats {
 }
 
 export function FornecedoresHistoricoList() {
-  usePermissionGuard("menu_notificacoes");
+  usePermissionGuard("notificacoes.historico_fornecedores");
   const [fornecedores, setFornecedores] = useState<FornecedorStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
