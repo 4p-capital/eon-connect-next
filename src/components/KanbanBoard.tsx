@@ -2763,7 +2763,7 @@ const KanbanCard = memo(function KanbanCard(props: KanbanCardProps) {
                       <span className="text-[var(--error)]">*</span>
                     </Label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {['Adroaldo Rodrigues', 'Alessandro Alves', 'André Lopes', 'Edinaldo Abreu', 'Erivaldo', 'Emanuelly', 'Manoel Eziquiel', 'Ruil Rames', 'Paulo Sérgio', 'Raimundo da Cunha', 'Heliton Antônio', 'David Custódio', 'Kaio Vinicius', 'Manoel Francisco', 'Letícia Barcelos', 'Juliana Fonteles', 'Flávio Galdino', 'Rosana', 'Evânia', 'Marta'].map((nome) => (
+                      {['Adroaldo Rodrigues', 'Alessandro Alves', 'André Lopes', 'Edinaldo Abreu', 'Erivaldo', 'Emanuelly', 'Manoel Eziquiel', 'Ruil Rames', 'Paulo Sérgio', 'Raimundo da Cunha', 'Heliton Antônio', 'David Custódio', 'Kaio Vinicius', 'Manoel Francisco', 'Letícia Barcelos', 'Juliana Fonteles', 'Flávio Galdino', 'Rosana', 'Evânia', 'Marta', 'Francisco Paulo'].map((nome) => (
                         <label
                           key={nome}
                           htmlFor={`resp-${nome}`}
