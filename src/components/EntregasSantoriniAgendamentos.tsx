@@ -21,17 +21,11 @@ import {
   AlertTriangle,
   Hash,
   ShoppingBag,
-  Camera,
-  Upload,
-  ClipboardCheck,
-  ExternalLink,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Calendar } from "@/components/ui/calendar";
 import { usePermissionGuard } from "@/hooks/usePermissionGuard";
 import { getSupabaseClient } from "@/utils/supabase/client";
-import { projectId, publicAnonKey } from "@/utils/supabase/info";
-import { useRouter } from "next/navigation";
 
 // ═══════════════════════════════════════════════════════════════════
 // Tela admin — Acompanhamento de agendamentos de entrega de chaves
@@ -817,11 +811,9 @@ function VistaCalendario({
 }
 
 // ═══════════════════════════════════════════════════════════════
-// DRAWER DE DETALHES DO AGENDAMENTO
+// DRAWER DE DETALHES DO AGENDAMENTO (somente leitura)
+// Ações de recebimento/vistoria moveram para /entregas/santorini/recebimento
 // ═══════════════════════════════════════════════════════════════
-
-const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d`;
-const AUTH_HEADER = { Authorization: `Bearer ${publicAnonKey}` };
 
 function AgendamentoDrawer({
   slot,
@@ -830,144 +822,6 @@ function AgendamentoDrawer({
   slot: SlotComCliente | null;
   onClose: () => void;
 }) {
-  const router = useRouter();
-  const [tipoRep, setTipoRep] = useState<"cliente" | "terceiro">("cliente");
-  const [uploading, setUploading] = useState(false);
-  const [vistoriaId, setVistoriaId] = useState<string | null>(null);
-  const [vistoriaStatus, setVistoriaStatus] = useState<string | null>(null);
-  const [docPreviews, setDocPreviews] = useState<Record<string, string>>({});
-  const [docPaths, setDocPaths] = useState<Record<string, string>>({});
-  const [docsValidados, setDocsValidados] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
-
-  // Carrega vistoria existente ao abrir o drawer
-  useEffect(() => {
-    if (!slot?.id) return;
-    setTipoRep("cliente");
-    setDocPreviews({});
-    setDocPaths({});
-    setDocsValidados(false);
-    setVistoriaId(null);
-    setVistoriaStatus(null);
-    setErro(null);
-
-    const checkVistoria = async () => {
-      try {
-        const resp = await fetch(`${API_BASE}/entregas/vistoria/criar`, {
-          method: "POST",
-          headers: { ...AUTH_HEADER, "Content-Type": "application/json" },
-          body: JSON.stringify({ slot_id: slot.id, tipo_representante: "cliente" }),
-        });
-        const data = await resp.json();
-        if (data.ok && data.vistoria) {
-          setVistoriaId(data.vistoria.id);
-          setVistoriaStatus(data.vistoria.status);
-          if (data.vistoria.status !== "aguardando_docs") {
-            setDocsValidados(true);
-          }
-          // Se já existia, carregar dados completos
-          if (data.ja_existia) {
-            const detResp = await fetch(`${API_BASE}/entregas/vistoria/${data.vistoria.id}`, {
-              headers: AUTH_HEADER,
-            });
-            const det = await detResp.json();
-            if (det.ok) {
-              setVistoriaStatus(det.vistoria.status);
-              setTipoRep(det.vistoria.tipo_representante || "cliente");
-              if (det.vistoria.docs_validados_em) setDocsValidados(true);
-              const previews: Record<string, string> = {};
-              if (det.docs.identidade) previews.identidade = det.docs.identidade;
-              if (det.docs.procuracao) previews.procuracao = det.docs.procuracao;
-              if (det.docs.proprietario) previews.proprietario = det.docs.proprietario;
-              setDocPreviews(previews);
-            }
-          }
-        }
-      } catch {
-        // silently fail — drawer still shows info
-      }
-    };
-
-    if (slot.checkin_token) {
-      checkVistoria();
-    }
-  }, [slot?.id, slot?.checkin_token]);
-
-  const handleUploadDoc = async (tipo: string, file: File) => {
-    if (!vistoriaId) return;
-    setUploading(true);
-    setErro(null);
-    try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-
-      const resp = await fetch(`${API_BASE}/entregas/vistoria/${vistoriaId}/upload-doc`, {
-        method: "POST",
-        headers: { ...AUTH_HEADER, "Content-Type": "application/json" },
-        body: JSON.stringify({ tipo, base64 }),
-      });
-      const data = await resp.json();
-      if (!data.ok) throw new Error(data.error);
-
-      setDocPreviews((prev) => ({ ...prev, [tipo]: data.url }));
-      setDocPaths((prev) => ({ ...prev, [tipo]: data.path }));
-    } catch (err: any) {
-      setErro(err.message || "Erro ao fazer upload");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleValidarDocs = async () => {
-    if (!vistoriaId) return;
-    setActionLoading(true);
-    setErro(null);
-    try {
-      // Atualiza tipo_representante
-      const supabase = getSupabaseClient();
-      await (supabase.from("vistoria_entrega") as any)
-        .update({ tipo_representante: tipoRep })
-        .eq("id", vistoriaId);
-
-      const resp = await fetch(`${API_BASE}/entregas/vistoria/${vistoriaId}/validar-docs`, {
-        method: "POST",
-        headers: AUTH_HEADER,
-      });
-      const data = await resp.json();
-      if (!data.ok) throw new Error(data.error);
-      setDocsValidados(true);
-      setVistoriaStatus("docs_validados");
-    } catch (err: any) {
-      setErro(err.message || "Erro ao validar documentos");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleIniciarVistoria = async () => {
-    if (!vistoriaId) return;
-    setActionLoading(true);
-    setErro(null);
-    try {
-      const resp = await fetch(`${API_BASE}/entregas/vistoria/${vistoriaId}/iniciar`, {
-        method: "POST",
-        headers: AUTH_HEADER,
-      });
-      const data = await resp.json();
-      if (!data.ok) throw new Error(data.error);
-      router.push(`/entregas/santorini/vistoria/${vistoriaId}`);
-    } catch (err: any) {
-      setErro(err.message || "Erro ao iniciar vistoria");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   if (!slot) return null;
 
   const confirmado = !!slot.checkin_token;
@@ -1214,116 +1068,6 @@ function AgendamentoDrawer({
                 </div>
               </div>
 
-              {/* Recebimento / Vistoria — só aparece para agendamentos confirmados */}
-              {confirmado && vistoriaId && (
-                <div className="space-y-3">
-                  <p className="text-[11px] font-semibold text-[var(--muted-foreground)] uppercase tracking-wider">
-                    Recebimento — Documentos
-                  </p>
-
-                  {/* Tipo representante */}
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setTipoRep("cliente")}
-                      disabled={docsValidados}
-                      className={`flex-1 py-2 text-sm font-medium rounded-lg border transition-all ${
-                        tipoRep === "cliente"
-                          ? "bg-black text-white border-black"
-                          : "bg-white text-[var(--foreground)] border-[var(--border)] hover:bg-[var(--background-alt)]"
-                      } disabled:opacity-60`}
-                    >
-                      Cliente
-                    </button>
-                    <button
-                      onClick={() => setTipoRep("terceiro")}
-                      disabled={docsValidados}
-                      className={`flex-1 py-2 text-sm font-medium rounded-lg border transition-all ${
-                        tipoRep === "terceiro"
-                          ? "bg-black text-white border-black"
-                          : "bg-white text-[var(--foreground)] border-[var(--border)] hover:bg-[var(--background-alt)]"
-                      } disabled:opacity-60`}
-                    >
-                      Terceiro
-                    </button>
-                  </div>
-
-                  {/* Upload de documentos */}
-                  <DocUploadField
-                    label="RG ou CNH"
-                    tipo="identidade"
-                    preview={docPreviews.identidade}
-                    disabled={docsValidados || uploading}
-                    onUpload={(file) => handleUploadDoc("identidade", file)}
-                  />
-
-                  {tipoRep === "terceiro" && (
-                    <>
-                      <DocUploadField
-                        label="Procuração"
-                        tipo="procuracao"
-                        preview={docPreviews.procuracao}
-                        disabled={docsValidados || uploading}
-                        onUpload={(file) => handleUploadDoc("procuracao", file)}
-                      />
-                      <DocUploadField
-                        label="RG/CNH do Proprietário"
-                        tipo="proprietario"
-                        preview={docPreviews.proprietario}
-                        disabled={docsValidados || uploading}
-                        onUpload={(file) => handleUploadDoc("proprietario", file)}
-                      />
-                    </>
-                  )}
-
-                  {erro && (
-                    <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-2">
-                      {erro}
-                    </p>
-                  )}
-
-                  {/* Botão validar docs */}
-                  {!docsValidados && (
-                    <button
-                      onClick={handleValidarDocs}
-                      disabled={
-                        actionLoading || uploading || !docPreviews.identidade ||
-                        (tipoRep === "terceiro" && (!docPreviews.procuracao || !docPreviews.proprietario))
-                      }
-                      className="w-full py-2.5 rounded-xl bg-black text-white text-sm font-medium hover:bg-gray-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      {actionLoading ? "Validando..." : "Validar Documentos"}
-                    </button>
-                  )}
-
-                  {/* Botão iniciar vistoria */}
-                  {docsValidados && vistoriaStatus !== "vistoria_em_andamento" && vistoriaStatus !== "concluida" && (
-                    <button
-                      onClick={handleIniciarVistoria}
-                      disabled={actionLoading}
-                      className="w-full py-3 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
-                    >
-                      <ClipboardCheck className="w-4 h-4" />
-                      {actionLoading ? "Iniciando..." : "Iniciar Vistoria"}
-                    </button>
-                  )}
-
-                  {/* Link para vistoria em andamento ou concluída */}
-                  {(vistoriaStatus === "vistoria_em_andamento" || vistoriaStatus === "concluida") && (
-                    <button
-                      onClick={() => router.push(`/entregas/santorini/vistoria/${vistoriaId}`)}
-                      className={`w-full py-3 rounded-xl text-white text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
-                        vistoriaStatus === "concluida"
-                          ? "bg-emerald-600 hover:bg-emerald-700"
-                          : "bg-blue-600 hover:bg-blue-700"
-                      }`}
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      {vistoriaStatus === "concluida" ? "Ver Vistoria Concluída" : "Continuar Vistoria"}
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
           </motion.div>
         </>
@@ -1365,66 +1109,3 @@ function PendenciaItem({ label }: { label: string }) {
   );
 }
 
-function DocUploadField({
-  label,
-  tipo,
-  preview,
-  disabled,
-  onUpload,
-}: {
-  label: string;
-  tipo: string;
-  preview?: string;
-  disabled: boolean;
-  onUpload: (file: File) => void;
-}) {
-  const inputId = `doc-upload-${tipo}`;
-  return (
-    <div className="rounded-xl border border-[var(--border)] p-3 space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Camera className="w-4 h-4 text-[var(--muted-foreground)]" />
-          <span className="text-sm font-medium text-[var(--foreground)]">{label}</span>
-        </div>
-        {preview ? (
-          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
-            Enviado
-          </span>
-        ) : (
-          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
-            Pendente
-          </span>
-        )}
-      </div>
-      {preview ? (
-        <img
-          src={preview}
-          alt={label}
-          className="w-full h-32 object-cover rounded-lg border border-[var(--border)]"
-        />
-      ) : (
-        <label
-          htmlFor={inputId}
-          className={`flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-[var(--border)] rounded-lg cursor-pointer hover:border-gray-400 transition-colors ${
-            disabled ? "opacity-40 pointer-events-none" : ""
-          }`}
-        >
-          <Upload className="w-5 h-5 text-[var(--muted-foreground)] mb-1" />
-          <span className="text-xs text-[var(--muted-foreground)]">Clique para enviar foto</span>
-          <input
-            id={inputId}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            disabled={disabled}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) onUpload(file);
-            }}
-          />
-        </label>
-      )}
-    </div>
-  );
-}

@@ -4,21 +4,30 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 export const entregasRoutes = new Hono();
 
 // ═══════════════════════════════════════════════════════════════════
-// 🔑 ENTREGA DE CHAVES — Fase 1: Agendamento (rotas públicas)
-// ═══════════════════════════════════════════════════════════════════
+// 🔑 ENTREGA DE CHAVES
 //
-// Fluxo:
-//   1. POST /entregas/validar-cpf   → GATE (AGEHAB+PRO-SOLUTO+JUROS-OBRA)
-//   2. GET  /entregas/disponibilidade?empreendimento=...&desde=...&ate=...
-//   3. POST /entregas/reservar      → UPDATE atômico (anti-overbooking)
-//   4. POST /entregas/cancelar
-//   5. POST /entregas/remarcar
+// Fluxo completo:
+//   Agendamento (público, por CPF):
+//     validar-cpf → disponibilidade → reservar → confirmar (gera QR)
+//   Recebimento (engenheiro logado):
+//     /entregas/checkin/:token   → identifica cliente
+//     /entregas/vistoria/criar   → cria/recupera vistoria (status=aguardando_docs)
+//     /entregas/vistoria/:id/upload-doc + validar-docs
+//     /entregas/vistoria/:id/iniciar (requer status=docs_validados)
+//     /entregas/vistoria/:id/item (upload checklist item)
+//     /entregas/vistoria/:id/finalizar (parecer: apto|nao_apto)
+//   Assinatura (cliente, mesmo QR):
+//     /entregas/assinar/:token   → valida status=finalizada_apto
+//     /entregas/assinar/:token/confirmar → grava assinatura, queima token
 //
-// Regras:
-//   - Cliente identificado por CPF (somente dígitos)
-//   - Gate: pendencia_agehab AND pendencia_prosoluto AND pendencia_jurosobra = false
-//   - Janela mínima: D+7 (cliente só agenda 7 dias após hoje)
-//   - Concorrência: partial unique index em entrega_slot.reserva_cliente_id
+// Máquina de estados (vistoria_entrega.status):
+//   aguardando_docs → docs_validados → vistoria_em_andamento
+//     → finalizada_apto  → termo_assinado
+//     → finalizada_nao_apto (terminal)
+//
+// Regra de segurança:
+//   Cada transição é validada no backend via .eq("status", ESPERADO).
+//   Assinatura só permitida se status = finalizada_apto.
 // ═══════════════════════════════════════════════════════════════════
 
 let _supabase: ReturnType<typeof createClient> | null = null;
@@ -45,9 +54,10 @@ function dataMinimaAgendavel(): string {
   return d.toISOString().slice(0, 10);
 }
 
-// ───────────────────────────────────────────────────────────────────
-// POST /entregas/validar-cpf
-// ───────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+// Fase 1: Agendamento (rotas públicas)
+// ═══════════════════════════════════════════════════════════════════
+
 entregasRoutes.post("/entregas/validar-cpf", async (c) => {
   try {
     const body = await c.req.json();
@@ -62,7 +72,6 @@ entregasRoutes.post("/entregas/validar-cpf", async (c) => {
 
     const supabase = getSupabase();
 
-    // Busca o cliente pelo CPF (ignorando formatação no banco)
     const { data: clientes, error } = await supabase
       .from("clientes_entrega_santorini")
       .select(
@@ -95,7 +104,6 @@ entregasRoutes.post("/entregas/validar-cpf", async (c) => {
     const temPendencia =
       pendencias.agehab || pendencias.pro_soluto || pendencias.juros_obra;
 
-    // Busca reserva ativa do cliente (se houver), incluindo checkin_token
     const { data: reservaAtiva } = await supabase
       .from("entrega_slot")
       .select("id, data, hora_inicio, hora_fim, reservado_em, checkin_token")
@@ -135,17 +143,12 @@ entregasRoutes.post("/entregas/validar-cpf", async (c) => {
   }
 });
 
-// ───────────────────────────────────────────────────────────────────
-// GET /entregas/disponibilidade?desde=YYYY-MM-DD&ate=YYYY-MM-DD
-// Retorna agregação por dia + lista de slots livres
-// ───────────────────────────────────────────────────────────────────
 entregasRoutes.get("/entregas/disponibilidade", async (c) => {
   try {
     const desdeParam = c.req.query("desde");
     const ateParam = c.req.query("ate");
 
     const desde = desdeParam ?? dataMinimaAgendavel();
-    // Default: 90 dias à frente
     const ate =
       ateParam ??
       (() => {
@@ -156,8 +159,6 @@ entregasRoutes.get("/entregas/disponibilidade", async (c) => {
 
     const supabase = getSupabase();
 
-    // Busca TODOS os slots não-bloqueados da janela (livres + reservados)
-    // pra conseguir mostrar dias lotados como desabilitados.
     const { data: slots, error } = await supabase
       .from("entrega_slot")
       .select("id, data, hora_inicio, hora_fim, reserva_cliente_id")
@@ -216,10 +217,6 @@ entregasRoutes.get("/entregas/disponibilidade", async (c) => {
   }
 });
 
-// ───────────────────────────────────────────────────────────────────
-// POST /entregas/reservar  { cpf, slot_id }
-// UPDATE atômico — Postgres serializa via partial unique index
-// ───────────────────────────────────────────────────────────────────
 entregasRoutes.post("/entregas/reservar", async (c) => {
   try {
     const body = await c.req.json();
@@ -235,7 +232,6 @@ entregasRoutes.post("/entregas/reservar", async (c) => {
 
     const supabase = getSupabase();
 
-    // 1) Revalida o gate
     const { data: clientes, error: errCli } = await supabase
       .from("clientes_entrega_santorini")
       .select(
@@ -269,7 +265,6 @@ entregasRoutes.post("/entregas/reservar", async (c) => {
       );
     }
 
-    // 2) Confere se o slot está dentro da janela D+7
     const { data: slotInfo, error: errSlot } = await supabase
       .from("entrega_slot")
       .select("id, data, hora_inicio, hora_fim, bloqueado, reserva_cliente_id")
@@ -299,7 +294,6 @@ entregasRoutes.post("/entregas/reservar", async (c) => {
       );
     }
 
-    // 3) UPDATE atômico — só vence quem encontrar a vaga ainda livre
     const { data: reservaResult, error: errReserva } = await supabase
       .from("entrega_slot")
       .update({
@@ -313,7 +307,6 @@ entregasRoutes.post("/entregas/reservar", async (c) => {
       .maybeSingle();
 
     if (errReserva) {
-      // Pode ser violação do partial unique index (cliente já tem outra reserva)
       const msg = String(errReserva.message ?? "");
       if (msg.includes("idx_entrega_slot_um_por_cliente")) {
         return c.json(
@@ -339,7 +332,6 @@ entregasRoutes.post("/entregas/reservar", async (c) => {
       );
     }
 
-    // 4) Atualiza agendado_em no cliente (denormalizado, facilita queries)
     await supabase
       .from("clientes_entrega_santorini")
       .update({ agendado_em: new Date().toISOString() })
@@ -367,10 +359,6 @@ entregasRoutes.post("/entregas/reservar", async (c) => {
   }
 });
 
-// ───────────────────────────────────────────────────────────────────
-// POST /entregas/confirmar  { cpf }
-// Gera checkin_token no slot reservado → confirma o agendamento
-// ───────────────────────────────────────────────────────────────────
 entregasRoutes.post("/entregas/confirmar", async (c) => {
   try {
     const body = await c.req.json();
@@ -381,7 +369,6 @@ entregasRoutes.post("/entregas/confirmar", async (c) => {
 
     const supabase = getSupabase();
 
-    // Resolve cliente
     const { data: clientes, error: errCli } = await supabase
       .from("clientes_entrega_santorini")
       .select("id, cpf_cnpj");
@@ -394,7 +381,6 @@ entregasRoutes.post("/entregas/confirmar", async (c) => {
       return c.json({ ok: false, error: "CPF não encontrado" }, 404);
     }
 
-    // Busca slot reservado pelo cliente (sem checkin_token ainda)
     const { data: slot, error: errSlot } = await supabase
       .from("entrega_slot")
       .select("id, data, hora_inicio, hora_fim, checkin_token")
@@ -409,7 +395,6 @@ entregasRoutes.post("/entregas/confirmar", async (c) => {
       );
     }
 
-    // Se já tem token, retorna o existente (idempotente)
     if ((slot as any).checkin_token) {
       return c.json({
         ok: true,
@@ -423,7 +408,6 @@ entregasRoutes.post("/entregas/confirmar", async (c) => {
       });
     }
 
-    // Gera o token
     const { data: updated, error: errUp } = await supabase
       .from("entrega_slot")
       .update({ checkin_token: crypto.randomUUID() })
@@ -432,7 +416,6 @@ entregasRoutes.post("/entregas/confirmar", async (c) => {
       .maybeSingle();
     if (errUp) throw errUp;
 
-    // Atualiza agendado_em no cliente (denormalizado)
     await supabase
       .from("clientes_entrega_santorini")
       .update({ agendado_em: new Date().toISOString() })
@@ -454,10 +437,6 @@ entregasRoutes.post("/entregas/confirmar", async (c) => {
   }
 });
 
-// ───────────────────────────────────────────────────────────────────
-// POST /entregas/cancelar  { cpf }
-// Libera o slot do cliente
-// ───────────────────────────────────────────────────────────────────
 entregasRoutes.post("/entregas/cancelar", async (c) => {
   try {
     const body = await c.req.json();
@@ -499,13 +478,6 @@ entregasRoutes.post("/entregas/cancelar", async (c) => {
   }
 });
 
-// ───────────────────────────────────────────────────────────────────
-// POST /entregas/remarcar  { cpf, slot_id }
-// Cancela a reserva atual e tenta o novo slot atomicamente.
-// (Não é uma transação real porque o supabase-js não expõe BEGIN/COMMIT,
-//  mas o partial unique index garante que mesmo no race o cliente
-//  nunca terá 2 reservas simultaneamente.)
-// ───────────────────────────────────────────────────────────────────
 entregasRoutes.post("/entregas/remarcar", async (c) => {
   try {
     const body = await c.req.json();
@@ -518,7 +490,6 @@ entregasRoutes.post("/entregas/remarcar", async (c) => {
 
     const supabase = getSupabase();
 
-    // Resolve cliente
     const { data: clientes, error: errCli } = await supabase
       .from("clientes_entrega_santorini")
       .select("id, cpf_cnpj");
@@ -531,14 +502,12 @@ entregasRoutes.post("/entregas/remarcar", async (c) => {
       return c.json({ ok: false, error: "CPF não encontrado" }, 404);
     }
 
-    // Salva o slot atual pra rollback
     const { data: slotAtual } = await supabase
       .from("entrega_slot")
       .select("id")
       .eq("reserva_cliente_id", cliente.id)
       .maybeSingle();
 
-    // Libera o slot atual
     if (slotAtual) {
       await supabase
         .from("entrega_slot")
@@ -546,7 +515,6 @@ entregasRoutes.post("/entregas/remarcar", async (c) => {
         .eq("id", (slotAtual as any).id);
     }
 
-    // Tenta reservar o novo
     const { data: novaReserva, error: errReserva } = await supabase
       .from("entrega_slot")
       .update({
@@ -560,7 +528,6 @@ entregasRoutes.post("/entregas/remarcar", async (c) => {
       .maybeSingle();
 
     if (errReserva || !novaReserva) {
-      // Rollback: tenta restaurar o slot anterior
       if (slotAtual) {
         await supabase
           .from("entrega_slot")
@@ -589,7 +556,7 @@ entregasRoutes.post("/entregas/remarcar", async (c) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// 🏠 ENTREGA DE CHAVES — Fase 2: Recebimento (vistoria + docs)
+// Fase 2: Recebimento / Vistoria (engenheiro logado)
 // ═══════════════════════════════════════════════════════════════════
 
 const BUCKET_RECEBIMENTO = "entrega-recebimento";
@@ -609,24 +576,26 @@ async function ensureRecBucket() {
   }
 }
 
-const CHECKLIST_VISTORIA = [
-  { key: "pintura_paredes", label: "Pintura das paredes" },
-  { key: "piso_ceramica", label: "Piso cerâmico" },
-  { key: "portas", label: "Portas" },
-  { key: "janelas", label: "Janelas" },
-  { key: "fechaduras", label: "Fechaduras" },
-  { key: "tomadas_interruptores", label: "Tomadas e interruptores" },
-  { key: "instalacao_eletrica", label: "Instalação elétrica" },
-  { key: "instalacao_hidraulica", label: "Instalação hidráulica" },
-  { key: "loucas_metais", label: "Louças e metais" },
-  { key: "bancadas", label: "Bancadas" },
-  { key: "forro_gesso", label: "Forro de gesso" },
-  { key: "rejunte", label: "Rejunte" },
-];
+async function decodeBase64Image(base64: string): Promise<{ bytes: Uint8Array; ext: "png" | "jpg" }> {
+  const raw = base64.includes(",") ? base64.split(",")[1] : base64;
+  const bytes = Uint8Array.from(atob(raw), (ch) => ch.charCodeAt(0));
+  const ext: "png" | "jpg" = base64.startsWith("data:image/png") ? "png" : "jpg";
+  return { bytes, ext };
+}
+
+async function signedUrl(path: string | null, ttlSeconds = 24 * 60 * 60): Promise<string | null> {
+  if (!path) return null;
+  const supabase = getSupabase();
+  const { data } = await supabase.storage
+    .from(BUCKET_RECEBIMENTO)
+    .createSignedUrl(path, ttlSeconds);
+  return data?.signedUrl ?? null;
+}
 
 // ───────────────────────────────────────────────────────────────────
 // GET /entregas/checkin/:token
-// Busca dados do slot+cliente pelo checkin_token
+// Engenheiro escaneia QR → identifica slot + cliente + vistoria (se houver)
+// Marca token_usado_checkin_em na primeira leitura.
 // ───────────────────────────────────────────────────────────────────
 entregasRoutes.get("/entregas/checkin/:token", async (c) => {
   try {
@@ -638,32 +607,44 @@ entregasRoutes.get("/entregas/checkin/:token", async (c) => {
       .from("entrega_slot")
       .select(
         `id, data, hora_inicio, hora_fim, checkin_token, reserva_cliente_id,
+         token_usado_checkin_em, token_usado_assinatura_em,
          clientes_entrega_santorini!entrega_slot_reserva_cliente_id_fkey (
-           id, cliente, bloco, unidade, cpf_cnpj, telefone, email, reserva
+           id, cliente, bloco, unidade, cpf_cnpj, telefone, email, reserva,
+           pendencia_agehab, pendencia_prosoluto, pendencia_jurosobra
          )`,
       )
       .eq("checkin_token", token)
       .maybeSingle();
 
     if (error) throw error;
-    if (!slot) return c.json({ ok: false, error: "Token não encontrado" }, 404);
+    if (!slot) return c.json({ ok: false, error: "Token não encontrado", code: "TOKEN_INVALIDO" }, 404);
 
     const cli = (slot as any).clientes_entrega_santorini;
 
-    // Verifica se já existe vistoria para este slot
     const { data: vistoria } = await supabase
       .from("vistoria_entrega")
-      .select("id, status")
+      .select("id, status, parecer_cliente, iniciada_em, finalizada_em, termo_assinado_em")
       .eq("entrega_slot_id", slot.id)
       .maybeSingle();
+
+    // Marca primeira leitura do QR (não sobrescreve)
+    if (!(slot as any).token_usado_checkin_em) {
+      await supabase
+        .from("entrega_slot")
+        .update({ token_usado_checkin_em: new Date().toISOString() })
+        .eq("id", (slot as any).id)
+        .is("token_usado_checkin_em", null);
+    }
 
     return c.json({
       ok: true,
       slot: {
-        id: slot.id,
-        data: slot.data,
-        hora_inicio: slot.hora_inicio,
-        hora_fim: slot.hora_fim,
+        id: (slot as any).id,
+        data: (slot as any).data,
+        hora_inicio: (slot as any).hora_inicio,
+        hora_fim: (slot as any).hora_fim,
+        token_usado_checkin_em: (slot as any).token_usado_checkin_em,
+        token_usado_assinatura_em: (slot as any).token_usado_assinatura_em,
       },
       cliente: {
         id: cli?.id,
@@ -674,6 +655,11 @@ entregasRoutes.get("/entregas/checkin/:token", async (c) => {
         telefone: cli?.telefone,
         email: cli?.email,
         reserva: cli?.reserva,
+        pendencias: {
+          agehab: cli?.pendencia_agehab === true,
+          pro_soluto: cli?.pendencia_prosoluto === true,
+          juros_obra: cli?.pendencia_jurosobra === true,
+        },
       },
       vistoria: vistoria ?? null,
     });
@@ -684,69 +670,157 @@ entregasRoutes.get("/entregas/checkin/:token", async (c) => {
 });
 
 // ───────────────────────────────────────────────────────────────────
+// GET /entregas/recebimento/lista
+// Lista todas as vistorias (em andamento + finalizadas) do engenheiro
+// ───────────────────────────────────────────────────────────────────
+entregasRoutes.get("/entregas/recebimento/lista", async (c) => {
+  try {
+    const supabase = getSupabase();
+
+    const { data, error } = await supabase
+      .from("vistoria_entrega")
+      .select(
+        `id, status, parecer_cliente, iniciada_em, finalizada_em, termo_assinado_em,
+         engenheiro_user_id, created_at, updated_at,
+         clientes_entrega_santorini!vistoria_entrega_cliente_id_fkey (
+           cliente, bloco, unidade, cpf_cnpj
+         ),
+         entrega_slot!vistoria_entrega_entrega_slot_id_fkey (
+           data, hora_inicio, hora_fim, checkin_token
+         ),
+         engenheiro:User!vistoria_entrega_engenheiro_user_id_fkey (
+           id, nome, email
+         )`,
+      )
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    const vistorias = (data ?? []).map((v: any) => ({
+      id: v.id,
+      status: v.status,
+      parecer_cliente: v.parecer_cliente,
+      iniciada_em: v.iniciada_em,
+      finalizada_em: v.finalizada_em,
+      termo_assinado_em: v.termo_assinado_em,
+      created_at: v.created_at,
+      updated_at: v.updated_at,
+      cliente: {
+        nome: v.clientes_entrega_santorini?.cliente,
+        bloco: v.clientes_entrega_santorini?.bloco,
+        unidade: v.clientes_entrega_santorini?.unidade,
+        cpf: v.clientes_entrega_santorini?.cpf_cnpj,
+      },
+      slot: {
+        data: v.entrega_slot?.data,
+        hora_inicio: v.entrega_slot?.hora_inicio,
+        hora_fim: v.entrega_slot?.hora_fim,
+        checkin_token: v.entrega_slot?.checkin_token,
+      },
+      engenheiro: v.engenheiro
+        ? {
+            id: v.engenheiro.id,
+            nome: v.engenheiro.nome?.trim() || null,
+            email: v.engenheiro.email,
+          }
+        : null,
+    }));
+
+    return c.json({ ok: true, vistorias });
+  } catch (err) {
+    console.error("❌ /entregas/recebimento/lista:", err);
+    return c.json({ ok: false, error: "Erro ao listar vistorias" }, 500);
+  }
+});
+
+// ───────────────────────────────────────────────────────────────────
 // POST /entregas/vistoria/criar
-// Cria registro de vistoria + itens do checklist
-// Body: { slot_id, tipo_representante? }
+// Cria vistoria (idempotente) + snapshot do catálogo de itens
+// Body: { slot_id, tipo_representante?, engenheiro_user_id? }
 // ───────────────────────────────────────────────────────────────────
 entregasRoutes.post("/entregas/vistoria/criar", async (c) => {
   try {
     const body = await c.req.json();
     const slotId = String(body?.slot_id ?? "");
     const tipo = body?.tipo_representante ?? "cliente";
+    const engenheiroUserId = body?.engenheiro_user_id ?? null;
 
     if (!slotId) return c.json({ ok: false, error: "slot_id obrigatório" }, 400);
 
     const supabase = getSupabase();
 
-    // Busca slot e cliente
     const { data: slot, error: errSlot } = await supabase
       .from("entrega_slot")
-      .select("id, reserva_cliente_id, checkin_token")
+      .select("id, empreendimento, reserva_cliente_id, checkin_token")
       .eq("id", slotId)
       .maybeSingle();
 
     if (errSlot) throw errSlot;
     if (!slot) return c.json({ ok: false, error: "Slot não encontrado" }, 404);
-    if (!slot.reserva_cliente_id)
+    if (!(slot as any).reserva_cliente_id)
       return c.json({ ok: false, error: "Slot sem reserva" }, 400);
 
-    // Verifica se já existe vistoria
     const { data: existente } = await supabase
       .from("vistoria_entrega")
-      .select("id, status")
+      .select("id, status, engenheiro_user_id")
       .eq("entrega_slot_id", slotId)
       .maybeSingle();
 
     if (existente) {
+      // Backfill: se nunca teve engenheiro, grava o que abriu agora
+      if (!(existente as any).engenheiro_user_id && engenheiroUserId) {
+        await supabase
+          .from("vistoria_entrega")
+          .update({ engenheiro_user_id: engenheiroUserId })
+          .eq("id", (existente as any).id)
+          .is("engenheiro_user_id", null);
+      }
       return c.json({ ok: true, vistoria: existente, ja_existia: true });
     }
 
-    // Cria vistoria
+    const insertPayload: Record<string, any> = {
+      entrega_slot_id: slotId,
+      cliente_id: (slot as any).reserva_cliente_id,
+      tipo_representante: tipo,
+      status: "aguardando_docs",
+    };
+    if (engenheiroUserId) insertPayload.engenheiro_user_id = engenheiroUserId;
+
     const { data: vistoria, error: errVis } = await supabase
       .from("vistoria_entrega")
-      .insert({
-        entrega_slot_id: slotId,
-        cliente_id: slot.reserva_cliente_id,
-        tipo_representante: tipo,
-        status: "aguardando_docs",
-      })
+      .insert(insertPayload)
       .select("id, status")
       .single();
 
     if (errVis) throw errVis;
 
-    // Cria itens do checklist
-    const itens = CHECKLIST_VISTORIA.map((item) => ({
-      vistoria_id: vistoria.id,
-      item_key: item.key,
-      item_label: item.label,
-    }));
+    // Snapshot do catálogo ativo do empreendimento → itens da vistoria
+    const empreendimento = (slot as any).empreendimento || EMPREENDIMENTO_PADRAO;
+    const { data: templates, error: errTpl } = await supabase
+      .from("vistoria_item_template")
+      .select("id, categoria, descricao, ordem, foto_obrigatoria")
+      .eq("empreendimento", empreendimento)
+      .eq("ativo", true)
+      .order("ordem", { ascending: true });
 
-    const { error: errItens } = await supabase
-      .from("vistoria_entrega_item")
-      .insert(itens);
+    if (errTpl) throw errTpl;
 
-    if (errItens) throw errItens;
+    if ((templates ?? []).length > 0) {
+      const itens = (templates ?? []).map((t: any) => ({
+        vistoria_id: (vistoria as any).id,
+        template_id: t.id,
+        item_key: t.id, // backwards-compat com código legado
+        item_label: t.descricao,
+        categoria: t.categoria,
+        ordem: t.ordem ?? 0,
+      }));
+
+      const { error: errItens } = await supabase
+        .from("vistoria_entrega_item")
+        .insert(itens);
+
+      if (errItens) throw errItens;
+    }
 
     return c.json({ ok: true, vistoria, ja_existia: false });
   } catch (err) {
@@ -755,11 +829,6 @@ entregasRoutes.post("/entregas/vistoria/criar", async (c) => {
   }
 });
 
-// ───────────────────────────────────────────────────────────────────
-// POST /entregas/vistoria/:id/upload-doc
-// Upload de documento de identificação (base64 → Storage)
-// Body: { tipo: 'identidade'|'procuracao'|'proprietario', base64 }
-// ───────────────────────────────────────────────────────────────────
 entregasRoutes.post("/entregas/vistoria/:id/upload-doc", async (c) => {
   try {
     const vistoriaId = c.req.param("id");
@@ -775,13 +844,27 @@ entregasRoutes.post("/entregas/vistoria/:id/upload-doc", async (c) => {
       return c.json({ ok: false, error: "Tipo inválido" }, 400);
 
     const supabase = getSupabase();
+
+    // Guard: só pode enviar docs se vistoria está em aguardando_docs
+    const { data: vistoria } = await supabase
+      .from("vistoria_entrega")
+      .select("id, status")
+      .eq("id", vistoriaId)
+      .maybeSingle();
+
+    if (!vistoria)
+      return c.json({ ok: false, error: "Vistoria não encontrada" }, 404);
+
+    if ((vistoria as any).status !== "aguardando_docs") {
+      return c.json(
+        { ok: false, error: "Documentos já foram validados", code: "DOCS_BLOQUEADOS" },
+        409,
+      );
+    }
+
     await ensureRecBucket();
 
-    // Decode base64
-    const raw = base64.includes(",") ? base64.split(",")[1] : base64;
-    const bytes = Uint8Array.from(atob(raw), (ch) => ch.charCodeAt(0));
-
-    const ext = base64.startsWith("data:image/png") ? "png" : "jpg";
+    const { bytes, ext } = await decodeBase64Image(base64);
     const path = `${vistoriaId}/docs/${tipo}_${Date.now()}.${ext}`;
 
     const { error: upErr } = await supabase.storage
@@ -790,7 +873,6 @@ entregasRoutes.post("/entregas/vistoria/:id/upload-doc", async (c) => {
 
     if (upErr) throw upErr;
 
-    // Atualiza coluna correspondente
     const coluna =
       tipo === "identidade"
         ? "doc_identidade_path"
@@ -805,44 +887,49 @@ entregasRoutes.post("/entregas/vistoria/:id/upload-doc", async (c) => {
 
     if (updErr) throw updErr;
 
-    // Gera URL assinada
-    const { data: signed } = await supabase.storage
-      .from(BUCKET_RECEBIMENTO)
-      .createSignedUrl(path, 365 * 24 * 60 * 60);
+    const url = await signedUrl(path, 365 * 24 * 60 * 60);
 
-    return c.json({ ok: true, path, url: signed?.signedUrl });
+    return c.json({ ok: true, path, url });
   } catch (err) {
     console.error("❌ /entregas/vistoria/upload-doc:", err);
     return c.json({ ok: false, error: "Erro ao fazer upload" }, 500);
   }
 });
 
-// ───────────────────────────────────────────────────────────────────
-// POST /entregas/vistoria/:id/validar-docs
-// Marca documentos como validados e muda status
-// ───────────────────────────────────────────────────────────────────
 entregasRoutes.post("/entregas/vistoria/:id/validar-docs", async (c) => {
   try {
     const vistoriaId = c.req.param("id");
+    const body = await c.req.json().catch(() => ({}));
+    const tipoRepresentante = body?.tipo_representante;
+
     const supabase = getSupabase();
 
     const { data: vis, error: errVis } = await supabase
       .from("vistoria_entrega")
-      .select("id, tipo_representante, doc_identidade_path, doc_procuracao_path, doc_proprietario_path")
+      .select("id, status, tipo_representante, doc_identidade_path, doc_procuracao_path, doc_proprietario_path")
       .eq("id", vistoriaId)
       .maybeSingle();
 
     if (errVis) throw errVis;
     if (!vis) return c.json({ ok: false, error: "Vistoria não encontrada" }, 404);
 
-    // Valida se os docs obrigatórios foram enviados
-    if (!vis.doc_identidade_path)
+    // Guard: só valida se está no estado certo
+    if ((vis as any).status !== "aguardando_docs") {
+      return c.json(
+        { ok: false, error: "Documentos já foram validados", code: "ESTADO_INVALIDO" },
+        409,
+      );
+    }
+
+    const tipoFinal = tipoRepresentante || (vis as any).tipo_representante || "cliente";
+
+    if (!(vis as any).doc_identidade_path)
       return c.json({ ok: false, error: "Documento de identidade não enviado" }, 400);
 
-    if (vis.tipo_representante === "terceiro") {
-      if (!vis.doc_procuracao_path)
+    if (tipoFinal === "terceiro") {
+      if (!(vis as any).doc_procuracao_path)
         return c.json({ ok: false, error: "Procuração não enviada" }, 400);
-      if (!vis.doc_proprietario_path)
+      if (!(vis as any).doc_proprietario_path)
         return c.json({ ok: false, error: "Doc. do proprietário não enviado" }, 400);
     }
 
@@ -850,10 +937,12 @@ entregasRoutes.post("/entregas/vistoria/:id/validar-docs", async (c) => {
       .from("vistoria_entrega")
       .update({
         docs_validados_em: new Date().toISOString(),
+        tipo_representante: tipoFinal,
         status: "docs_validados",
         updated_at: new Date().toISOString(),
       })
-      .eq("id", vistoriaId);
+      .eq("id", vistoriaId)
+      .eq("status", "aguardando_docs");
 
     if (error) throw error;
     return c.json({ ok: true });
@@ -863,10 +952,6 @@ entregasRoutes.post("/entregas/vistoria/:id/validar-docs", async (c) => {
   }
 });
 
-// ───────────────────────────────────────────────────────────────────
-// GET /entregas/vistoria/:id
-// Retorna vistoria completa com itens e URLs dos docs
-// ───────────────────────────────────────────────────────────────────
 entregasRoutes.get("/entregas/vistoria/:id", async (c) => {
   try {
     const vistoriaId = c.req.param("id");
@@ -879,7 +964,11 @@ entregasRoutes.get("/entregas/vistoria/:id", async (c) => {
            cliente, bloco, unidade, cpf_cnpj, telefone, email
          ),
          entrega_slot!vistoria_entrega_entrega_slot_id_fkey (
-           data, hora_inicio, hora_fim
+           id, data, hora_inicio, hora_fim, checkin_token,
+           token_usado_checkin_em, token_usado_assinatura_em
+         ),
+         engenheiro:User!vistoria_entrega_engenheiro_user_id_fkey (
+           id, nome, email
          )`,
       )
       .eq("id", vistoriaId)
@@ -888,34 +977,25 @@ entregasRoutes.get("/entregas/vistoria/:id", async (c) => {
     if (errVis) throw errVis;
     if (!vis) return c.json({ ok: false, error: "Vistoria não encontrada" }, 404);
 
-    // Busca itens
     const { data: itens, error: errItens } = await supabase
       .from("vistoria_entrega_item")
       .select("*")
       .eq("vistoria_id", vistoriaId)
-      .order("item_key", { ascending: true });
+      .order("ordem", { ascending: true })
+      .order("item_label", { ascending: true });
 
     if (errItens) throw errItens;
 
-    // Gera URLs assinadas para docs e fotos
-    const signUrl = async (path: string | null) => {
-      if (!path) return null;
-      const { data } = await supabase.storage
-        .from(BUCKET_RECEBIMENTO)
-        .createSignedUrl(path, 24 * 60 * 60); // 24h
-      return data?.signedUrl ?? null;
-    };
-
     const docUrls = {
-      identidade: await signUrl(vis.doc_identidade_path),
-      procuracao: await signUrl(vis.doc_procuracao_path),
-      proprietario: await signUrl(vis.doc_proprietario_path),
+      identidade: await signedUrl((vis as any).doc_identidade_path),
+      procuracao: await signedUrl((vis as any).doc_procuracao_path),
+      proprietario: await signedUrl((vis as any).doc_proprietario_path),
     };
 
     const itensComUrl = await Promise.all(
       (itens ?? []).map(async (item: any) => ({
         ...item,
-        foto_url: await signUrl(item.foto_path),
+        foto_url: await signedUrl(item.foto_path),
       })),
     );
 
@@ -925,12 +1005,17 @@ entregasRoutes.get("/entregas/vistoria/:id", async (c) => {
     return c.json({
       ok: true,
       vistoria: {
-        id: vis.id,
-        status: vis.status,
-        tipo_representante: vis.tipo_representante,
-        docs_validados_em: vis.docs_validados_em,
-        iniciada_em: vis.iniciada_em,
-        concluida_em: vis.concluida_em,
+        id: (vis as any).id,
+        status: (vis as any).status,
+        tipo_representante: (vis as any).tipo_representante,
+        docs_validados_em: (vis as any).docs_validados_em,
+        iniciada_em: (vis as any).iniciada_em,
+        concluida_em: (vis as any).concluida_em,
+        finalizada_em: (vis as any).finalizada_em,
+        parecer_cliente: (vis as any).parecer_cliente,
+        observacoes_gerais: (vis as any).observacoes_gerais,
+        termo_assinado_em: (vis as any).termo_assinado_em,
+        engenheiro_user_id: (vis as any).engenheiro_user_id,
       },
       cliente: {
         nome: cli?.cliente,
@@ -941,10 +1026,21 @@ entregasRoutes.get("/entregas/vistoria/:id", async (c) => {
         email: cli?.email,
       },
       slot: {
+        id: slot?.id,
         data: slot?.data,
         hora_inicio: slot?.hora_inicio,
         hora_fim: slot?.hora_fim,
+        checkin_token: slot?.checkin_token,
+        token_usado_checkin_em: slot?.token_usado_checkin_em,
+        token_usado_assinatura_em: slot?.token_usado_assinatura_em,
       },
+      engenheiro: (vis as any).engenheiro
+        ? {
+            id: (vis as any).engenheiro.id,
+            nome: (vis as any).engenheiro.nome?.trim() || null,
+            email: (vis as any).engenheiro.email,
+          }
+        : null,
       docs: docUrls,
       itens: itensComUrl,
     });
@@ -954,16 +1050,13 @@ entregasRoutes.get("/entregas/vistoria/:id", async (c) => {
   }
 });
 
-// ───────────────────────────────────────────────────────────────────
-// POST /entregas/vistoria/:id/iniciar
-// Muda status para vistoria_em_andamento
-// ───────────────────────────────────────────────────────────────────
 entregasRoutes.post("/entregas/vistoria/:id/iniciar", async (c) => {
   try {
     const vistoriaId = c.req.param("id");
     const supabase = getSupabase();
 
-    const { error } = await supabase
+    // Guard: só inicia se docs validados (máquina de estados)
+    const { data, error } = await supabase
       .from("vistoria_entrega")
       .update({
         status: "vistoria_em_andamento",
@@ -971,9 +1064,21 @@ entregasRoutes.post("/entregas/vistoria/:id/iniciar", async (c) => {
         updated_at: new Date().toISOString(),
       })
       .eq("id", vistoriaId)
-      .eq("status", "docs_validados");
+      .eq("status", "docs_validados")
+      .select("id")
+      .maybeSingle();
 
     if (error) throw error;
+    if (!data) {
+      return c.json(
+        {
+          ok: false,
+          error: "Vistoria não está pronta para iniciar (documentos não validados)",
+          code: "ESTADO_INVALIDO",
+        },
+        409,
+      );
+    }
     return c.json({ ok: true });
   } catch (err) {
     console.error("❌ /entregas/vistoria/iniciar:", err);
@@ -981,11 +1086,6 @@ entregasRoutes.post("/entregas/vistoria/:id/iniciar", async (c) => {
   }
 });
 
-// ───────────────────────────────────────────────────────────────────
-// POST /entregas/vistoria/:id/item
-// Atualiza item do checklist (aceito, observação, foto)
-// Body: { item_key, aceito, observacao?, foto_base64? }
-// ───────────────────────────────────────────────────────────────────
 entregasRoutes.post("/entregas/vistoria/:id/item", async (c) => {
   try {
     const vistoriaId = c.req.param("id");
@@ -1000,13 +1100,29 @@ entregasRoutes.post("/entregas/vistoria/:id/item", async (c) => {
 
     const supabase = getSupabase();
 
-    // Upload da foto se enviada
+    // Guard: só edita itens se vistoria está em andamento
+    const { data: vistoria } = await supabase
+      .from("vistoria_entrega")
+      .select("status")
+      .eq("id", vistoriaId)
+      .maybeSingle();
+
+    if (!vistoria)
+      return c.json({ ok: false, error: "Vistoria não encontrada" }, 404);
+
+    const statusOk = (vistoria as any).status === "vistoria_em_andamento" ||
+                     (vistoria as any).status === "docs_validados";
+    if (!statusOk) {
+      return c.json(
+        { ok: false, error: "Vistoria não está em andamento", code: "ESTADO_INVALIDO" },
+        409,
+      );
+    }
+
     let fotoPath: string | undefined;
     if (fotoBase64) {
       await ensureRecBucket();
-      const raw = fotoBase64.includes(",") ? fotoBase64.split(",")[1] : fotoBase64;
-      const bytes = Uint8Array.from(atob(raw), (ch) => ch.charCodeAt(0));
-      const ext = fotoBase64.startsWith("data:image/png") ? "png" : "jpg";
+      const { bytes, ext } = await decodeBase64Image(fotoBase64);
       fotoPath = `${vistoriaId}/itens/${itemKey}_${Date.now()}.${ext}`;
 
       const { error: upErr } = await supabase.storage
@@ -1016,7 +1132,6 @@ entregasRoutes.post("/entregas/vistoria/:id/item", async (c) => {
       if (upErr) throw upErr;
     }
 
-    // Monta update
     const update: Record<string, any> = {
       atualizado_em: new Date().toISOString(),
     };
@@ -1036,14 +1151,7 @@ entregasRoutes.post("/entregas/vistoria/:id/item", async (c) => {
     if (!data)
       return c.json({ ok: false, error: "Item não encontrado" }, 404);
 
-    // Gera URL assinada da foto
-    let fotoUrl = null;
-    if (data.foto_path) {
-      const { data: signed } = await supabase.storage
-        .from(BUCKET_RECEBIMENTO)
-        .createSignedUrl(data.foto_path, 24 * 60 * 60);
-      fotoUrl = signed?.signedUrl ?? null;
-    }
+    const fotoUrl = await signedUrl((data as any).foto_path);
 
     return c.json({ ok: true, item: { ...data, foto_url: fotoUrl } });
   } catch (err) {
@@ -1053,15 +1161,27 @@ entregasRoutes.post("/entregas/vistoria/:id/item", async (c) => {
 });
 
 // ───────────────────────────────────────────────────────────────────
-// POST /entregas/vistoria/:id/concluir
-// Finaliza a vistoria (valida que todos os itens têm status + foto)
+// POST /entregas/vistoria/:id/finalizar
+// Finaliza com parecer do cliente (apto | nao_apto).
+// Body: { parecer_cliente: 'apto' | 'nao_apto', observacoes_gerais?: string }
 // ───────────────────────────────────────────────────────────────────
-entregasRoutes.post("/entregas/vistoria/:id/concluir", async (c) => {
+entregasRoutes.post("/entregas/vistoria/:id/finalizar", async (c) => {
   try {
     const vistoriaId = c.req.param("id");
+    const body = await c.req.json();
+    const parecer = body?.parecer_cliente as string;
+    const observacoes = body?.observacoes_gerais as string | undefined;
+
+    if (parecer !== "apto" && parecer !== "nao_apto") {
+      return c.json(
+        { ok: false, error: "parecer_cliente inválido (apto|nao_apto)" },
+        400,
+      );
+    }
+
     const supabase = getSupabase();
 
-    // Valida se todos os itens estão preenchidos
+    // Valida que todos os itens têm status + foto
     const { data: itens, error: errItens } = await supabase
       .from("vistoria_entrega_item")
       .select("item_key, aceito, foto_path")
@@ -1076,24 +1196,256 @@ entregasRoutes.post("/entregas/vistoria/:id/concluir", async (c) => {
     if (pendentes.length > 0) {
       return c.json({
         ok: false,
-        error: `${pendentes.length} item(ns) pendente(s)`,
+        error: `${pendentes.length} item(ns) pendente(s) — preencha status e foto`,
         pendentes: pendentes.map((i: any) => i.item_key),
       }, 400);
     }
 
-    const { error } = await supabase
+    const novoStatus = parecer === "apto" ? "finalizada_apto" : "finalizada_nao_apto";
+
+    const { data, error } = await supabase
       .from("vistoria_entrega")
       .update({
-        status: "concluida",
-        concluida_em: new Date().toISOString(),
+        status: novoStatus,
+        parecer_cliente: parecer,
+        observacoes_gerais: observacoes ?? null,
+        finalizada_em: new Date().toISOString(),
+        concluida_em: new Date().toISOString(), // backwards-compat
         updated_at: new Date().toISOString(),
       })
-      .eq("id", vistoriaId);
+      .eq("id", vistoriaId)
+      .eq("status", "vistoria_em_andamento")
+      .select("id, status, parecer_cliente")
+      .maybeSingle();
 
     if (error) throw error;
-    return c.json({ ok: true });
+    if (!data) {
+      return c.json(
+        {
+          ok: false,
+          error: "Vistoria não pode ser finalizada nesse estado",
+          code: "ESTADO_INVALIDO",
+        },
+        409,
+      );
+    }
+
+    return c.json({ ok: true, vistoria: data });
   } catch (err) {
-    console.error("❌ /entregas/vistoria/concluir:", err);
-    return c.json({ ok: false, error: "Erro ao concluir vistoria" }, 500);
+    console.error("❌ /entregas/vistoria/finalizar:", err);
+    return c.json({ ok: false, error: "Erro ao finalizar vistoria" }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Fase 3: Assinatura (cliente, mesmo QR do check-in)
+// ═══════════════════════════════════════════════════════════════════
+
+// ───────────────────────────────────────────────────────────────────
+// GET /entregas/assinar/:token
+// Cliente escaneia o MESMO QR para assinar o termo.
+// Retorna contexto + habilita/bloqueia assinatura com base no status da vistoria.
+// ───────────────────────────────────────────────────────────────────
+entregasRoutes.get("/entregas/assinar/:token", async (c) => {
+  try {
+    const token = c.req.param("token");
+    if (!token) return c.json({ ok: false, error: "Token inválido" }, 400);
+
+    const supabase = getSupabase();
+
+    const { data: slot, error } = await supabase
+      .from("entrega_slot")
+      .select(
+        `id, data, hora_inicio, hora_fim,
+         token_usado_checkin_em, token_usado_assinatura_em,
+         clientes_entrega_santorini!entrega_slot_reserva_cliente_id_fkey (
+           cliente, bloco, unidade, cpf_cnpj
+         )`,
+      )
+      .eq("checkin_token", token)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!slot) {
+      return c.json(
+        { ok: false, error: "Código não reconhecido", code: "TOKEN_INVALIDO" },
+        404,
+      );
+    }
+
+    if ((slot as any).token_usado_assinatura_em) {
+      return c.json({
+        ok: true,
+        pode_assinar: false,
+        motivo: "JA_ASSINADO",
+        mensagem: "Este termo já foi assinado.",
+        cliente: {
+          nome: (slot as any).clientes_entrega_santorini?.cliente,
+          bloco: (slot as any).clientes_entrega_santorini?.bloco,
+          unidade: (slot as any).clientes_entrega_santorini?.unidade,
+        },
+      });
+    }
+
+    const { data: vistoria } = await supabase
+      .from("vistoria_entrega")
+      .select("id, status, parecer_cliente")
+      .eq("entrega_slot_id", (slot as any).id)
+      .maybeSingle();
+
+    const cli = (slot as any).clientes_entrega_santorini;
+    const baseResp = {
+      cliente: { nome: cli?.cliente, bloco: cli?.bloco, unidade: cli?.unidade },
+      slot: {
+        data: (slot as any).data,
+        hora_inicio: (slot as any).hora_inicio,
+        hora_fim: (slot as any).hora_fim,
+      },
+      vistoria: vistoria ?? null,
+    };
+
+    if (!vistoria) {
+      return c.json({
+        ok: true,
+        pode_assinar: false,
+        motivo: "VISTORIA_NAO_INICIADA",
+        mensagem: "A vistoria ainda não foi iniciada. Aguarde o engenheiro.",
+        ...baseResp,
+      });
+    }
+
+    if ((vistoria as any).status === "finalizada_nao_apto") {
+      return c.json({
+        ok: true,
+        pode_assinar: false,
+        motivo: "NAO_APTO",
+        mensagem: "A unidade foi considerada não apta para recebimento.",
+        ...baseResp,
+      });
+    }
+
+    if ((vistoria as any).status !== "finalizada_apto") {
+      return c.json({
+        ok: true,
+        pode_assinar: false,
+        motivo: "VISTORIA_EM_ANDAMENTO",
+        mensagem: "A vistoria ainda está em andamento.",
+        ...baseResp,
+      });
+    }
+
+    return c.json({
+      ok: true,
+      pode_assinar: true,
+      ...baseResp,
+    });
+  } catch (err) {
+    console.error("❌ /entregas/assinar GET:", err);
+    return c.json({ ok: false, error: "Erro ao validar assinatura" }, 500);
+  }
+});
+
+// ───────────────────────────────────────────────────────────────────
+// POST /entregas/assinar/:token/confirmar
+// Marca termo como assinado (stub — integração Clicksign virá depois).
+// Queima o token (token_usado_assinatura_em).
+// Guard de segurança: só permite se vistoria.status = finalizada_apto.
+// ───────────────────────────────────────────────────────────────────
+entregasRoutes.post("/entregas/assinar/:token/confirmar", async (c) => {
+  try {
+    const token = c.req.param("token");
+    if (!token) return c.json({ ok: false, error: "Token inválido" }, 400);
+
+    const supabase = getSupabase();
+
+    const { data: slot, error: errSlot } = await supabase
+      .from("entrega_slot")
+      .select("id, token_usado_assinatura_em")
+      .eq("checkin_token", token)
+      .maybeSingle();
+
+    if (errSlot) throw errSlot;
+    if (!slot) return c.json({ ok: false, error: "Token inválido" }, 404);
+
+    if ((slot as any).token_usado_assinatura_em) {
+      return c.json(
+        { ok: false, error: "Termo já assinado", code: "JA_ASSINADO" },
+        409,
+      );
+    }
+
+    const { data: vistoria } = await supabase
+      .from("vistoria_entrega")
+      .select("id, status")
+      .eq("entrega_slot_id", (slot as any).id)
+      .maybeSingle();
+
+    if (!vistoria || (vistoria as any).status !== "finalizada_apto") {
+      return c.json(
+        {
+          ok: false,
+          error: "Vistoria não está apta para assinatura",
+          code: "NAO_APTO",
+        },
+        403,
+      );
+    }
+
+    const agora = new Date().toISOString();
+
+    // Transição atômica: vistoria → termo_assinado só se estava em finalizada_apto
+    const { data: updatedVis, error: errVis } = await supabase
+      .from("vistoria_entrega")
+      .update({
+        status: "termo_assinado",
+        termo_assinado_em: agora,
+        updated_at: agora,
+      })
+      .eq("id", (vistoria as any).id)
+      .eq("status", "finalizada_apto")
+      .select("id, status, termo_assinado_em")
+      .maybeSingle();
+
+    if (errVis) throw errVis;
+    if (!updatedVis) {
+      return c.json(
+        { ok: false, error: "Estado da vistoria mudou, tente novamente", code: "ESTADO_INVALIDO" },
+        409,
+      );
+    }
+
+    // Queima o token
+    const { error: errSlotUp } = await supabase
+      .from("entrega_slot")
+      .update({ token_usado_assinatura_em: agora })
+      .eq("id", (slot as any).id);
+
+    if (errSlotUp) throw errSlotUp;
+
+    return c.json({ ok: true, vistoria: updatedVis });
+  } catch (err) {
+    console.error("❌ /entregas/assinar POST:", err);
+    return c.json({ ok: false, error: "Erro ao confirmar assinatura" }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Admin: catálogo de itens (para futura tela de gerenciamento)
+// ═══════════════════════════════════════════════════════════════════
+entregasRoutes.get("/entregas/catalogo-itens", async (c) => {
+  try {
+    const empreendimento = c.req.query("empreendimento") ?? EMPREENDIMENTO_PADRAO;
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("vistoria_item_template")
+      .select("id, categoria, descricao, ordem, foto_obrigatoria, ativo")
+      .eq("empreendimento", empreendimento)
+      .order("ordem", { ascending: true });
+
+    if (error) throw error;
+    return c.json({ ok: true, itens: data ?? [] });
+  } catch (err) {
+    console.error("❌ /entregas/catalogo-itens:", err);
+    return c.json({ ok: false, error: "Erro ao listar catálogo" }, 500);
   }
 });
