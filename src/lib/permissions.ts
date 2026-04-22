@@ -26,7 +26,9 @@ export type UserPermissions = {
     view?: boolean;
     santorini?: {
       view?: boolean;
-      pendencias?: boolean;
+      pendencias?:
+        | boolean
+        | { view?: boolean; contratos?: boolean; financeiro?: boolean };
       agendamentos?: boolean;
       recebimento?: boolean;
     };
@@ -123,7 +125,14 @@ export const PERMISSION_TREE: PermissionTreeNode[] = [
         key: 'santorini',
         label: 'Gran Santorini',
         children: [
-          { key: 'pendencias', label: 'Pendências' },
+          {
+            key: 'pendencias',
+            label: 'Pendências',
+            children: [
+              { key: 'contratos', label: 'Contratos (AGEHAB)' },
+              { key: 'financeiro', label: 'Financeiro (Pró-Soluto + Juros Obra)' },
+            ],
+          },
           { key: 'agendamentos', label: 'Agendamentos' },
           { key: 'recebimento', label: 'Recebimento / Vistoria' },
         ],

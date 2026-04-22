@@ -1454,3 +1454,91 @@ entregasRoutes.get("/entregas/catalogo-itens", async (c) => {
     return c.json({ ok: false, error: "Erro ao listar catálogo" }, 500);
   }
 });
+
+// ═══════════════════════════════════════════════════════════════════
+// Toggle de pendências por setor
+// Mapeamento campo → setor:
+//   pendencia_agehab     → Contratos
+//   pendencia_prosoluto  → Financeiro
+//   pendencia_jurosobra  → Financeiro
+// Valida permissão a partir de User.permissions (auth_user_id).
+// ═══════════════════════════════════════════════════════════════════
+
+type PendenciaCampo = "pendencia_agehab" | "pendencia_prosoluto" | "pendencia_jurosobra";
+
+const CAMPO_SETOR: Record<PendenciaCampo, "contratos" | "financeiro"> = {
+  pendencia_agehab: "contratos",
+  pendencia_prosoluto: "financeiro",
+  pendencia_jurosobra: "financeiro",
+};
+
+function podePendencia(permissions: any, setor: "contratos" | "financeiro"): boolean {
+  const p = permissions?.entregas?.santorini?.pendencias;
+  if (p === true) return false; // Formato legado (boolean) não distingue setor
+  if (p && typeof p === "object" && p[setor] === true) return true;
+  return false;
+}
+
+entregasRoutes.post("/entregas/pendencias/toggle", async (c) => {
+  try {
+    const body = await c.req.json();
+    const clienteId = String(body?.cliente_id ?? "");
+    const campo = body?.campo as PendenciaCampo;
+    const valor = Boolean(body?.valor);
+    const authUserId = String(body?.auth_user_id ?? "");
+
+    if (!clienteId || !authUserId) {
+      return c.json({ ok: false, error: "cliente_id e auth_user_id obrigatórios" }, 400);
+    }
+    if (!(campo in CAMPO_SETOR)) {
+      return c.json({ ok: false, error: "Campo inválido" }, 400);
+    }
+
+    const supabase = getSupabase();
+
+    // Lookup do usuário pelos Supabase auth UUID → permissions
+    const { data: user, error: errUser } = await supabase
+      .from("User")
+      .select("id, nome, permissions")
+      .eq("auth_user_id", authUserId)
+      .maybeSingle();
+
+    if (errUser) throw errUser;
+    if (!user) {
+      return c.json({ ok: false, error: "Usuário não encontrado", code: "USER_NAO_ENCONTRADO" }, 401);
+    }
+
+    const setor = CAMPO_SETOR[campo];
+    if (!podePendencia((user as any).permissions, setor)) {
+      return c.json(
+        {
+          ok: false,
+          error: `Você não tem permissão para alterar este campo (setor ${setor}).`,
+          code: "SEM_PERMISSAO",
+        },
+        403,
+      );
+    }
+
+    const { data: atualizado, error: errUp } = await supabase
+      .from("clientes_entrega_santorini")
+      .update({ [campo]: valor })
+      .eq("id", clienteId)
+      .select(`id, ${campo}`)
+      .maybeSingle();
+
+    if (errUp) throw errUp;
+    if (!atualizado) {
+      return c.json({ ok: false, error: "Cliente não encontrado" }, 404);
+    }
+
+    return c.json({
+      ok: true,
+      cliente: atualizado,
+      alterado_por: { id: (user as any).id, nome: (user as any).nome?.trim() || null },
+    });
+  } catch (err) {
+    console.error("❌ /entregas/pendencias/toggle:", err);
+    return c.json({ ok: false, error: "Erro ao atualizar pendência" }, 500);
+  }
+});
