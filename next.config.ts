@@ -68,8 +68,10 @@ const nextConfig: NextConfig = {
             value: "max-age=63072000; includeSubDomains; preload",
           },
           {
+            // Permite câmera na própria origem (leitura de QR no painel de
+            // recebimento). Mic/geo continuam desabilitados por padrão.
             key: "Permissions-Policy",
-            value: "camera=(), microphone=(), geolocation=()",
+            value: "camera=(self), microphone=(), geolocation=()",
           },
         ],
       },

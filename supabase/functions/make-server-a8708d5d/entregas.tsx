@@ -677,11 +677,15 @@ entregasRoutes.get("/entregas/recebimento/lista", async (c) => {
   try {
     const supabase = getSupabase();
 
+    // Só lista vistorias que o engenheiro de fato começou — a prova de vida é
+    // ter enviado o primeiro doc (identidade, sempre obrigatório). Vistorias
+    // "zumbi" em aguardando_docs sem nenhum upload ficam ocultas e são
+    // reaproveitadas quando o engenheiro escaneia o QR daquele slot.
     const { data, error } = await supabase
       .from("vistoria_entrega")
       .select(
         `id, status, parecer_cliente, iniciada_em, finalizada_em, termo_assinado_em,
-         engenheiro_user_id, created_at, updated_at,
+         engenheiro_user_id, doc_identidade_path, created_at, updated_at,
          clientes_entrega_santorini!vistoria_entrega_cliente_id_fkey (
            cliente, bloco, unidade, cpf_cnpj
          ),
@@ -692,6 +696,7 @@ entregasRoutes.get("/entregas/recebimento/lista", async (c) => {
            id, nome, email
          )`,
       )
+      .or("doc_identidade_path.not.is.null,status.neq.aguardando_docs")
       .order("created_at", { ascending: false });
 
     if (error) throw error;
