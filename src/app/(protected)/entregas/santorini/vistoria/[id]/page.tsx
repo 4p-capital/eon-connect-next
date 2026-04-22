@@ -1,11 +1,13 @@
 "use client";
 
+import { use } from "react";
 import { VistoriaEntrega } from "@/components/VistoriaEntrega";
 
 export default function VistoriaEntregaPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  return <VistoriaEntrega vistoriaId={params.id} />;
+  const { id } = use(params);
+  return <VistoriaEntrega vistoriaId={id} />;
 }
