@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useCallback, memo, lazy, Suspense } from 'react';
 import { useDrag, useDrop } from 'react-dnd';
-import { projectId, publicAnonKey } from '@/utils/supabase/info';
+import { publicAnonKey, apiBaseUrl } from "@/utils/supabase/info";
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -248,7 +248,7 @@ const KanbanCard = memo(function KanbanCard(props: KanbanCardProps) {
       
       // Buscar url_foto da tabela Assistência Técnica via endpoint
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia/${idParaBuscar}/foto`,
+        `${apiBaseUrl}/assistencia/${idParaBuscar}/foto`,
         {
           headers: {
             Authorization: `Bearer ${publicAnonKey}`,
@@ -297,7 +297,7 @@ const KanbanCard = memo(function KanbanCard(props: KanbanCardProps) {
       console.log(`🤖 Solicitando análise GPT para chamado #${idReal}...`);
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/ai/analyze/${idReal}`,
+        `${apiBaseUrl}/ai/analyze/${idReal}`,
         {
           method: 'POST',
           headers: {
@@ -393,7 +393,7 @@ const KanbanCard = memo(function KanbanCard(props: KanbanCardProps) {
     const verificar = async () => {
       setVerificandoTermo(true);
       try {
-        const url = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia-finalizada/${solicitacao.id_finalizacao}/termo-pdf`;
+        const url = `${apiBaseUrl}/assistencia-finalizada/${solicitacao.id_finalizacao}/termo-pdf`;
         const resp = await fetch(url, {
           headers: { 'Authorization': `Bearer ${publicAnonKey}` },
         });
@@ -548,7 +548,7 @@ const KanbanCard = memo(function KanbanCard(props: KanbanCardProps) {
   const buscarMateriais = async () => {
     try {
       console.log('🔍 Buscando materiais da tabela materiais_reparo_pos_obra...');
-      const url = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/materiais`;
+      const url = `${apiBaseUrl}/materiais`;
       
       const response = await fetch(url, {
         method: 'GET',
@@ -636,7 +636,7 @@ const KanbanCard = memo(function KanbanCard(props: KanbanCardProps) {
       console.log(`✏️ Salvando contato da assistência #${idReal}:`, payload);
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia/${idReal}/contato`,
+        `${apiBaseUrl}/assistencia/${idReal}/contato`,
         {
           method: 'PATCH',
           headers: {
@@ -794,7 +794,7 @@ const KanbanCard = memo(function KanbanCard(props: KanbanCardProps) {
 
     try {
       setSalvandoNovoMaterial(true);
-      const url = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/materiais`;
+      const url = `${apiBaseUrl}/materiais`;
       
       const response = await fetch(url, {
         method: 'POST',
@@ -889,7 +889,7 @@ const KanbanCard = memo(function KanbanCard(props: KanbanCardProps) {
       // 🔍 Buscar dados da assistencia_finalizada
       console.log('🔍 ETAPA 1: Buscando dados da assistencia_finalizada...');
       const idAssistenciaReal = dadosCard.id_assistencia_original || dadosCard.id;
-      const urlFinalizacao = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia-finalizada/by-assistencia/${idAssistenciaReal}`;
+      const urlFinalizacao = `${apiBaseUrl}/assistencia-finalizada/by-assistencia/${idAssistenciaReal}`;
       console.log('   URL:', urlFinalizacao);
       console.log('   ID Assistência:', idAssistenciaReal);
       
@@ -996,7 +996,7 @@ const KanbanCard = memo(function KanbanCard(props: KanbanCardProps) {
         
         // 📌 NOTA: Para obter a foto, use o endpoint GET /assistencia-finalizada/{id}
         // A foto base64 foi removida do webhook para evitar payload muito grande
-        endpoint_foto: `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia-finalizada/${idFinalizacao}`
+        endpoint_foto: `${apiBaseUrl}/assistencia-finalizada/${idFinalizacao}`
       };
 
       // 🧹 Limpar campos vazios/nulos que podem causar erro 400
@@ -1066,7 +1066,7 @@ const KanbanCard = memo(function KanbanCard(props: KanbanCardProps) {
       console.log('───────────────────────────────────────────────────────');
       
       // Usar proxy do servidor para evitar CORS
-      const proxyUrl = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/webhook/makecom`;
+      const proxyUrl = `${apiBaseUrl}/webhook/makecom`;
       
       const response = await fetch(proxyUrl, {
         method: 'POST',
@@ -1250,7 +1250,7 @@ const KanbanCard = memo(function KanbanCard(props: KanbanCardProps) {
 
       if (!idFinalizacao) {
         // Buscar o ID da finalização usando a rota by-assistencia
-        const urlFinalizacao = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia-finalizada/by-assistencia/${solicitacao.id}`;
+        const urlFinalizacao = `${apiBaseUrl}/assistencia-finalizada/by-assistencia/${solicitacao.id}`;
         const responseFinalizacao = await fetch(urlFinalizacao, {
           method: 'GET',
           headers: { 'Authorization': `Bearer ${publicAnonKey}` },
@@ -1281,7 +1281,7 @@ const KanbanCard = memo(function KanbanCard(props: KanbanCardProps) {
       let fotoReparoBase64: string | undefined;
       try {
         const fotoResp = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia-finalizada/${idFinalizacao}/foto-reparo`,
+          `${apiBaseUrl}/assistencia-finalizada/${idFinalizacao}/foto-reparo`,
           { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
         );
         if (fotoResp.ok) {
@@ -1420,7 +1420,7 @@ const KanbanCard = memo(function KanbanCard(props: KanbanCardProps) {
       const pdfBase64 = await base64Promise;
 
       // 3️⃣ Enviar PDF + finalizar via endpoint
-      const url = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia-finalizada/${idFinalizacao}/finalizar-vencida`;
+      const url = `${apiBaseUrl}/assistencia-finalizada/${idFinalizacao}/finalizar-vencida`;
 
       const response = await fetch(url, {
         method: 'PATCH',
@@ -1503,7 +1503,7 @@ const KanbanCard = memo(function KanbanCard(props: KanbanCardProps) {
       console.log(`   Proprietário: ${solicitacao.proprietario}`);
       console.log(`   CPF: ${solicitacao.cpf}`);
 
-      const url = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia-finalizada/${solicitacao.id_finalizacao}/enviar-sienge`;
+      const url = `${apiBaseUrl}/assistencia-finalizada/${solicitacao.id_finalizacao}/enviar-sienge`;
 
       const response = await fetch(url, {
         method: 'POST',
@@ -1569,7 +1569,7 @@ const KanbanCard = memo(function KanbanCard(props: KanbanCardProps) {
       console.log('🔧 Finalizando manualmente...');
       console.log(`   Finalização #${solicitacao.id_finalizacao}`);
 
-      const url = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia-finalizada/${solicitacao.id_finalizacao}/finalizar-manual`;
+      const url = `${apiBaseUrl}/assistencia-finalizada/${solicitacao.id_finalizacao}/finalizar-manual`;
 
       const response = await fetch(url, {
         method: 'POST',
@@ -1704,7 +1704,7 @@ const KanbanCard = memo(function KanbanCard(props: KanbanCardProps) {
 
       // ── STEP 1: Registrar finalização no backend ──
       updateStep(0, 'loading');
-      const url = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia-finalizada/${solicitacao.id}`;
+      const url = `${apiBaseUrl}/assistencia-finalizada/${solicitacao.id}`;
       const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -3631,7 +3631,7 @@ export function KanbanBoard({
       toast(`Analisando ${chamadosSemAnalise.length} chamados...`);
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/ai/analyze-batch`,
+        `${apiBaseUrl}/ai/analyze-batch`,
         {
           method: 'POST',
           headers: {
@@ -3701,7 +3701,7 @@ export function KanbanBoard({
         onAtualizarSolicitacao(id, campo, isoDate);
       }
       
-      const url = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia/${idReal}/data`;
+      const url = `${apiBaseUrl}/assistencia/${idReal}/data`;
       console.log('URL da requisição:', url);
       
       const response = await fetch(url, {

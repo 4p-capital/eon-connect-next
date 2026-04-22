@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Search, Send, MessageCircle, Phone, Clock, CheckCheck, Filter, X, AlertCircle } from 'lucide-react';
-import { projectId, publicAnonKey } from '@/utils/supabase/info';
+import { publicAnonKey, apiBaseUrl } from "@/utils/supabase/info";
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 // 🎨 Mapeamento de cores para empreendimentos
@@ -208,7 +208,7 @@ export function WhatsAppChats() {
   const loadConversations = async () => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/whatsapp/conversations?status=all`,
+        `${apiBaseUrl}/whatsapp/conversations?status=all`,
         {
           headers: {
             Authorization: `Bearer ${publicAnonKey}`,
@@ -248,7 +248,7 @@ export function WhatsAppChats() {
   const loadMessages = async (conversationId: number) => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/whatsapp/conversations/${conversationId}/messages`,
+        `${apiBaseUrl}/whatsapp/conversations/${conversationId}/messages`,
         {
           headers: {
             Authorization: `Bearer ${publicAnonKey}`,
@@ -293,7 +293,7 @@ export function WhatsAppChats() {
   const markAsRead = async (conversationId: number) => {
     try {
       await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/whatsapp/conversations/${conversationId}/mark-read`,
+        `${apiBaseUrl}/whatsapp/conversations/${conversationId}/mark-read`,
         {
           method: 'POST',
           headers: {
@@ -326,7 +326,7 @@ export function WhatsAppChats() {
     try {
       // Enviar para a conversa mais recente (primeira da lista)
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/whatsapp/conversations/${selectedContact.conversations[0].id}/send`,
+        `${apiBaseUrl}/whatsapp/conversations/${selectedContact.conversations[0].id}/send`,
         {
           method: 'POST',
           headers: {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { projectId, publicAnonKey } from '@/utils/supabase/info';
+import { publicAnonKey, apiBaseUrl } from "@/utils/supabase/info";
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertTriangle, Ban, Clock, CheckCircle2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -32,7 +32,7 @@ export function WhatsAppStatusAlert() {
       const timer = setTimeout(() => controller.abort(), 10000);
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/whatsapp/status-alert`,
+        `${apiBaseUrl}/whatsapp/status-alert`,
         {
           headers: {
             'Authorization': `Bearer ${publicAnonKey}`,
@@ -72,7 +72,7 @@ export function WhatsAppStatusAlert() {
   const clearAlert = async () => {
     try {
       await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/whatsapp/clear-alert`,
+        `${apiBaseUrl}/whatsapp/clear-alert`,
         {
           method: 'POST',
           headers: {

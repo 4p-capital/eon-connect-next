@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { TrendingUp, BarChart3, PieChart as PieChartIcon, Building2, Package, Users, Star, AlertCircle, Calendar, Filter, X, ClipboardList, CheckCircle2, ShieldCheck } from 'lucide-react';
-import { projectId, publicAnonKey } from '@/utils/supabase/info';
+import { publicAnonKey, apiBaseUrl } from "@/utils/supabase/info";
 
 const CORES_GRAFICO = [
   '#3B82F6', '#111111', '#10B981', '#F59E0B',
@@ -165,7 +165,7 @@ export function DashboardAssistencia() {
       setErro(null);
 
       const headers = { 'Authorization': `Bearer ${publicAnonKey}` };
-      const baseUrl = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d`;
+      const baseUrl = `${apiBaseUrl}`;
 
       // Montar URL com filtros de data
       const params = new URLSearchParams();

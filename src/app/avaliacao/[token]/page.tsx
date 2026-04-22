@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { Send, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
-import { projectId, publicAnonKey } from "@/utils/supabase/info";
+import { publicAnonKey, clicksignFunctionUrl } from "@/utils/supabase/info";
 
 interface AvaliacaoData {
   id: string;
@@ -47,7 +47,7 @@ export default function AvaliacaoPage() {
   const carregarAvaliacao = async () => {
     try {
       const resp = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/clicksign/avaliacao?token=${token}`,
+        `${clicksignFunctionUrl}/avaliacao?token=${token}`,
         { headers: { Authorization: `Bearer ${publicAnonKey}`, apikey: publicAnonKey } }
       );
       if (!resp.ok) {
@@ -70,7 +70,7 @@ export default function AvaliacaoPage() {
     setEnviando(true);
     try {
       const resp = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/clicksign/avaliacao`,
+        `${clicksignFunctionUrl}/avaliacao`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${publicAnonKey}`, apikey: publicAnonKey },

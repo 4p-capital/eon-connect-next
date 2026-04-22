@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Trash2, AlertTriangle } from 'lucide-react';
-import { projectId, publicAnonKey } from '@/utils/supabase/info';
+import { publicAnonKey, apiBaseUrl } from "@/utils/supabase/info";
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,7 +22,7 @@ export function LimparDuplicatas() {
     
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/materiais/limpar-duplicatas`,
+        `${apiBaseUrl}/materiais/limpar-duplicatas`,
         {
           method: 'POST',
           headers: {

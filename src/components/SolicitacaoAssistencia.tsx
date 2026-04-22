@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { CheckCircle2, AlertCircle, Upload, User, Mail, CreditCard, Phone, Building2, Home, Wrench, FileText, ImageIcon, X, Shield, FileCheck, ArrowRight } from 'lucide-react';
-import { projectId, publicAnonKey } from '@/utils/supabase/info';
+import { publicAnonKey, apiBaseUrl } from "@/utils/supabase/info";
 import { getSupabaseClient } from '@/utils/supabase/client';
 import { PoliticaPrivacidade } from '@/components/PoliticaPrivacidade';
 import { TermoAssistenciaTecnica } from '@/components/TermoAssistenciaTecnica';
@@ -349,7 +349,7 @@ export function SolicitacaoAssistencia() {
       // Enviar dados e foto para o servidor
       console.log('🚀 Enviando solicitação para o servidor...');
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/solicitacao-assistencia`,
+        `${apiBaseUrl}/solicitacao-assistencia`,
         {
           method: 'POST',
           headers: {

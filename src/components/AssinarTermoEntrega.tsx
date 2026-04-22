@@ -12,9 +12,9 @@ import {
   Calendar as CalendarIcon,
   Building2,
 } from "lucide-react";
-import { projectId, publicAnonKey } from "@/utils/supabase/info";
+import { publicAnonKey, apiBaseUrl } from "@/utils/supabase/info";
 
-const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d`;
+const API_BASE = `${apiBaseUrl}`;
 const AUTH_HEADER = { Authorization: `Bearer ${publicAnonKey}` };
 
 // ═══════════════════════════════════════════════════════════════════

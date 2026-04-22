@@ -2,7 +2,7 @@
 // Cliente frontend para integração Clicksign via Edge Function do Supabase
 // Todas as chamadas à API Clicksign passam pelo backend (token seguro)
 
-import { projectId, publicAnonKey } from "@/utils/supabase/info";
+import { publicAnonKey, clicksignFunctionUrl } from "@/utils/supabase/info";
 
 // ============================================================
 // TIPOS
@@ -48,7 +48,7 @@ export interface ClicksignResendResult {
 // CONFIGURAÇÃO
 // ============================================================
 
-const CLICKSIGN_FUNCTION_URL = `https://${projectId}.supabase.co/functions/v1/clicksign`;
+const CLICKSIGN_FUNCTION_URL = `${clicksignFunctionUrl}`;
 
 async function clicksignFetch<T>(
   route: string,

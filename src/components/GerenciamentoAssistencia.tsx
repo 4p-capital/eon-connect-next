@@ -54,7 +54,7 @@ import { KanbanBoard } from '@/components/KanbanBoard';
 import { DashboardAssistencia } from '@/components/DashboardAssistencia';
 import { CalendarioAssistencia } from '@/components/CalendarioAssistencia';
 import { HistoricoAssistencias } from '@/components/HistoricoAssistencias';
-import { projectId, publicAnonKey } from '@/utils/supabase/info';
+import { projectId, publicAnonKey, apiBaseUrl } from "@/utils/supabase/info";
 
 export interface Solicitacao {
   id: number | string; // 🔑 Pode ser number (normal) ou string (finalizadas: "finalizada-123")
@@ -342,7 +342,7 @@ export function GerenciamentoAssistencia() {
       const idsStr = ids.join(',');
       console.log(`🤖 Buscando análises GPT para ${ids.length} chamados...`);
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/ai/analyses?ids=${idsStr}`,
+        `${apiBaseUrl}/ai/analyses?ids=${idsStr}`,
         { headers: { Authorization: `Bearer ${publicAnonKey}` } }
       );
       if (!response.ok) {
@@ -399,7 +399,7 @@ export function GerenciamentoAssistencia() {
       console.log(`=== CARREGANDO SOLICITAÇÕES VIA BACKEND - Página ${paginaParaCarregar} (${ITENS_POR_PAGINA} itens/página) ===`);
 
       // ⚡ PAGINAÇÃO: Carregar 50 registros por vez
-      const url = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia?page=${paginaParaCarregar}&limit=${ITENS_POR_PAGINA}`;
+      const url = `${apiBaseUrl}/assistencia?page=${paginaParaCarregar}&limit=${ITENS_POR_PAGINA}`;
       
       console.log('URL do backend:', url);
       console.log('ProjectId:', projectId);
@@ -487,7 +487,7 @@ export function GerenciamentoAssistencia() {
       
       if (resetar) {
         try {
-          const urlFinalizadas = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia-finalizada?status=Aguardando assinatura`;
+          const urlFinalizadas = `${apiBaseUrl}/assistencia-finalizada?status=Aguardando assinatura`;
           
           // 🔧 FIX v5: Adicionar timeout de 15s para evitar hanging
           const controllerFin = new AbortController();
@@ -520,7 +520,7 @@ export function GerenciamentoAssistencia() {
                 apenasAguardando.map(async (finalizada: any) => {
                   try {
                     // Buscar dados da assistência original
-                    const urlAssistencia = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia/${finalizada.id_assistencia}`;
+                    const urlAssistencia = `${apiBaseUrl}/assistencia/${finalizada.id_assistencia}`;
                     // 🔧 FIX v5: Timeout de 10s por request individual
                     const ctrlAss = new AbortController();
                     const tmrAss = setTimeout(() => ctrlAss.abort(), 10000);
@@ -654,7 +654,7 @@ export function GerenciamentoAssistencia() {
         }
       }
 
-      const url = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia/${idReal}/status`;
+      const url = `${apiBaseUrl}/assistencia/${idReal}/status`;
       console.log('URL:', url);
 
       const requestBody = { status_chamado: novoStatus };
@@ -716,7 +716,7 @@ export function GerenciamentoAssistencia() {
         }
       }
 
-      const url = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia/${idReal}/desqualificar`;
+      const url = `${apiBaseUrl}/assistencia/${idReal}/desqualificar`;
       console.log('URL:', url);
 
       const response = await fetch(url, {
@@ -865,7 +865,7 @@ export function GerenciamentoAssistencia() {
       });
 
       // ID vai como parâmetro de URL
-      const url = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia-finalizada/${solicitacaoParaFinalizar.id}`;
+      const url = `${apiBaseUrl}/assistencia-finalizada/${solicitacaoParaFinalizar.id}`;
       console.log('URL do endpoint:', url);
       console.log('🚀 Enviando requisição para o servidor...');
       

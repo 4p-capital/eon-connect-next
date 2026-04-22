@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Users, Shield, Search, Loader2, AlertCircle, Package, KeyRound } from 'lucide-react';
 import { usePermissionGuard } from '@/hooks/usePermissionGuard';
-import { projectId, publicAnonKey } from '@/utils/supabase/info';
+import { publicAnonKey, apiBaseUrl } from "@/utils/supabase/info";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { GerenciarMateriais } from '@/components/GerenciarMateriais';
 import { withRetry } from '@/utils/errorHandler';
@@ -76,7 +76,7 @@ export function Gerenciamento() {
         const timeoutId = setTimeout(() => controller.abort(), 10000);
 
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/users/all`,
+          `${apiBaseUrl}/users/all`,
           {
             method: 'GET',
             headers: {
@@ -123,7 +123,7 @@ export function Gerenciamento() {
       console.log('🔧 Iniciando sincronização de auth_user_id...');
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/sync-auth-user-ids`,
+        `${apiBaseUrl}/sync-auth-user-ids`,
         {
           method: 'POST',
           headers: {
@@ -162,7 +162,7 @@ export function Gerenciamento() {
     try {
       setSavingPermissions(true);
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/users/${userId}/permissions`,
+        `${apiBaseUrl}/users/${userId}/permissions`,
         {
           method: 'PATCH',
           headers: {
@@ -204,7 +204,7 @@ export function Gerenciamento() {
       setUpdatingUser(userId);
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/users/${userId}/permissions`,
+        `${apiBaseUrl}/users/${userId}/permissions`,
         {
           method: 'PATCH',
           headers: {

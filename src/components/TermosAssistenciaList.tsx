@@ -7,7 +7,7 @@ import {
   PenLine, TimerOff, AlertTriangle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { projectId, publicAnonKey } from '@/utils/supabase/info';
+import { publicAnonKey, apiBaseUrl } from "@/utils/supabase/info";
 import { toast } from 'sonner';
 
 // ── Tipos ──────────────────────────────────────────────────────────
@@ -127,7 +127,7 @@ export function TermosAssistenciaList() {
       if (filtroSienge) params.set('sienge', filtroSienge);
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/termos-assistencia?${params}`,
+        `${apiBaseUrl}/termos-assistencia?${params}`,
         { headers: { Authorization: `Bearer ${publicAnonKey}` } }
       );
       const result: ApiResponse = await response.json();
@@ -152,7 +152,7 @@ export function TermosAssistenciaList() {
   const fetchMetricas = useCallback(async () => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/termos-assistencia?page=1&limit=9999`,
+        `${apiBaseUrl}/termos-assistencia?page=1&limit=9999`,
         { headers: { Authorization: `Bearer ${publicAnonKey}` } }
       );
       const result: ApiResponse = await response.json();
@@ -182,7 +182,7 @@ export function TermosAssistenciaList() {
     setReenviando(termo.id);
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia-finalizada/${termo.id_finalizacao}/enviar-sienge`,
+        `${apiBaseUrl}/assistencia-finalizada/${termo.id_finalizacao}/enviar-sienge`,
         {
           method: 'POST',
           headers: {
@@ -216,7 +216,7 @@ export function TermosAssistenciaList() {
 
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia-finalizada/${termo.id_finalizacao}/termo-pdf`,
+        `${apiBaseUrl}/assistencia-finalizada/${termo.id_finalizacao}/termo-pdf`,
         { headers: { Authorization: `Bearer ${publicAnonKey}` } }
       );
       const result = await response.json();

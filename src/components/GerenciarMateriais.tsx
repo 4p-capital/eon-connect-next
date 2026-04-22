@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { projectId, publicAnonKey } from '@/utils/supabase/info';
+import { publicAnonKey, apiBaseUrl } from "@/utils/supabase/info";
 
 interface GerenciarMateriaisProps {
   aberto: boolean;
@@ -34,7 +34,7 @@ export function GerenciarMateriais({ aberto, aoFechar, aoAtualizar, modoEmbutido
     setCarregando(true);
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/materiais`,
+        `${apiBaseUrl}/materiais`,
         {
           headers: {
             'Authorization': `Bearer ${publicAnonKey}`,
@@ -63,7 +63,7 @@ export function GerenciarMateriais({ aberto, aoFechar, aoAtualizar, modoEmbutido
     setCarregando(true);
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/materiais`,
+        `${apiBaseUrl}/materiais`,
         {
           method: 'POST',
           headers: {
@@ -97,7 +97,7 @@ export function GerenciarMateriais({ aberto, aoFechar, aoAtualizar, modoEmbutido
     setCarregando(true);
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/materiais`,
+        `${apiBaseUrl}/materiais`,
         {
           method: 'PATCH',
           headers: {
@@ -132,7 +132,7 @@ export function GerenciarMateriais({ aberto, aoFechar, aoAtualizar, modoEmbutido
     setCarregando(true);
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/materiais`,
+        `${apiBaseUrl}/materiais`,
         {
           method: 'DELETE',
           headers: {
@@ -165,7 +165,7 @@ export function GerenciarMateriais({ aberto, aoFechar, aoAtualizar, modoEmbutido
       const interruptores = materiais.filter(m => m === 'Interruptor');
       if (interruptores.length > 1) {
         await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/materiais`,
+          `${apiBaseUrl}/materiais`,
           {
             method: 'PATCH',
             headers: {
@@ -184,7 +184,7 @@ export function GerenciarMateriais({ aberto, aoFechar, aoAtualizar, modoEmbutido
       const modulosUSB = materiais.filter(m => m === 'Módulo USB');
       if (modulosUSB.length > 1) {
         await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/materiais`,
+          `${apiBaseUrl}/materiais`,
           {
             method: 'DELETE',
             headers: {
@@ -200,7 +200,7 @@ export function GerenciarMateriais({ aberto, aoFechar, aoAtualizar, modoEmbutido
       const tintasBranco = materiais.filter(m => m === 'Tinta branco neve');
       if (tintasBranco.length > 1) {
         await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/materiais`,
+          `${apiBaseUrl}/materiais`,
           {
             method: 'DELETE',
             headers: {

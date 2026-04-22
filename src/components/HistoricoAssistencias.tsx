@@ -23,7 +23,7 @@ import {
   Hash,
   Star,
 } from 'lucide-react';
-import { projectId, publicAnonKey } from '@/utils/supabase/info';
+import { publicAnonKey, apiBaseUrl } from "@/utils/supabase/info";
 
 interface AssistenciaHistorico {
   id: number | string;
@@ -108,7 +108,7 @@ export function HistoricoAssistencias({ onRecarregarKanban }: HistoricoAssistenc
         ? '/assistencias-finalizadas'
         : '/assistencias-desqualificadas';
       
-      const url = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d${endpoint}`;
+      const url = `${apiBaseUrl}${endpoint}`;
       
       console.log(`📋 Carregando histórico de assistências ${tipoHistorico.toLowerCase()}...`);
       
@@ -164,7 +164,7 @@ export function HistoricoAssistencias({ onRecarregarKanban }: HistoricoAssistenc
       console.log(`✅ Reativando assistência ${id}...`);
       
       const response = await fetchWithRetry(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia/${id}/reativar`,
+        `${apiBaseUrl}/assistencia/${id}/reativar`,
         {
           method: 'PATCH',
           headers: {
@@ -231,7 +231,7 @@ export function HistoricoAssistencias({ onRecarregarKanban }: HistoricoAssistenc
       const idNumerico = idStr.replace('finalizado-', '');
       setBaixandoPdfId(item.id);
       console.log(`📄 Buscando PDF do termo para finalização #${idNumerico}...`);
-      const url = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia-finalizada/${idNumerico}/termo-pdf`;
+      const url = `${apiBaseUrl}/assistencia-finalizada/${idNumerico}/termo-pdf`;
       const response = await fetchWithRetry(url, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` },
       }, 15000, 1);

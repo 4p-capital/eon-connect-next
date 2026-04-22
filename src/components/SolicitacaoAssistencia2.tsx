@@ -13,7 +13,7 @@ import {
   Search, UserPlus, Loader2, ChevronLeft, ClipboardList, Pencil, Camera,
   ChevronDown, Clock, Tag, RefreshCw, Send
 } from 'lucide-react';
-import { projectId, publicAnonKey } from '@/utils/supabase/info';
+import { publicAnonKey, apiBaseUrl, clicksignFunctionUrl } from "@/utils/supabase/info";
 import { PoliticaPrivacidade } from '@/components/PoliticaPrivacidade';
 import { TermoAssistenciaTecnica } from '@/components/TermoAssistenciaTecnica';
 import { CpfValidator } from '@/components/CpfValidator';
@@ -232,7 +232,7 @@ export function SolicitacaoAssistencia2() {
     setCarregandoLista(true);
     try {
       const res = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/empreendimentos`,
+        `${apiBaseUrl}/empreendimentos`,
         { headers: { Authorization: `Bearer ${publicAnonKey}` } }
       );
       const result = await res.json();
@@ -248,7 +248,7 @@ export function SolicitacaoAssistencia2() {
     setCarregandoLista(true);
     try {
       const res = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/sindicos`,
+        `${apiBaseUrl}/sindicos`,
         { headers: { Authorization: `Bearer ${publicAnonKey}` } }
       );
       const result = await res.json();
@@ -311,7 +311,7 @@ export function SolicitacaoAssistencia2() {
     setTemPendenciaAssinatura(false);
     try {
       const res = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/chamados-cliente/${clienteId}`,
+        `${apiBaseUrl}/chamados-cliente/${clienteId}`,
         { headers: { Authorization: `Bearer ${publicAnonKey}` } }
       );
       const result = await res.json();
@@ -374,7 +374,7 @@ export function SolicitacaoAssistencia2() {
       if (!idFinalizacao) {
         console.log(`⚠️ id_finalizacao ausente no cache. Buscando via /by-assistencia/${chamadoId}...`);
         try {
-          const urlFinalizacao = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia-finalizada/by-assistencia/${chamadoId}`;
+          const urlFinalizacao = `${apiBaseUrl}/assistencia-finalizada/by-assistencia/${chamadoId}`;
           const resFin = await fetch(urlFinalizacao, {
             method: 'GET',
             headers: { 'Authorization': `Bearer ${publicAnonKey}` },
@@ -440,7 +440,7 @@ export function SolicitacaoAssistencia2() {
       if (!finFotoReparo && idFinalizacao) {
         try {
           const fotoResp = await fetch(
-            `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia-finalizada/${idFinalizacao}/foto-reparo`,
+            `${apiBaseUrl}/assistencia-finalizada/${idFinalizacao}/foto-reparo`,
             { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
           );
           if (fotoResp.ok) {
@@ -529,7 +529,7 @@ export function SolicitacaoAssistencia2() {
     try {
       const cpfLimpo = cpfBusca.replace(/\D/g, '');
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/clientes-cpf/${cpfLimpo}`,
+        `${apiBaseUrl}/clientes-cpf/${cpfLimpo}`,
         { headers: { Authorization: `Bearer ${publicAnonKey}` } }
       );
       const result = await response.json();
@@ -605,7 +605,7 @@ export function SolicitacaoAssistencia2() {
       }
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/clientes`,
+        `${apiBaseUrl}/clientes`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` },
@@ -663,7 +663,7 @@ export function SolicitacaoAssistencia2() {
     setAlert(null);
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/clientes/${cliente.id}`,
+        `${apiBaseUrl}/clientes/${cliente.id}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` },
@@ -733,7 +733,7 @@ export function SolicitacaoAssistencia2() {
       });
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/solicitacao-assistencia-v2`,
+        `${apiBaseUrl}/solicitacao-assistencia-v2`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` },
@@ -1565,7 +1565,7 @@ export function SolicitacaoAssistencia2() {
                                                 if (!idFin) {
                                                   // Fallback: buscar id_finalizacao via make-server
                                                   const finResp = await fetch(
-                                                    `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/assistencia-finalizada/by-assistencia/${chamado.id}`,
+                                                    `${apiBaseUrl}/assistencia-finalizada/by-assistencia/${chamado.id}`,
                                                     { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
                                                   );
                                                   if (finResp.ok) {
@@ -1582,7 +1582,7 @@ export function SolicitacaoAssistencia2() {
 
                                                 // Buscar signing_url via edge function clicksign (usa service_role, sem RLS)
                                                 const envResp = await fetch(
-                                                  `https://${projectId}.supabase.co/functions/v1/clicksign/signing-url?id_finalizacao=${idFin}`,
+                                                  `${clicksignFunctionUrl}/signing-url?id_finalizacao=${idFin}`,
                                                   {
                                                     headers: {
                                                       'Authorization': `Bearer ${publicAnonKey}`,

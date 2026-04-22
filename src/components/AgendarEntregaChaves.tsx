@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { QRCodeDots } from "@/components/QRCodeDots";
 import { Calendar } from "@/components/ui/calendar";
-import { projectId, publicAnonKey } from "@/utils/supabase/info";
+import { publicAnonKey, apiBaseUrl } from "@/utils/supabase/info";
 import { getSupabaseClient } from "@/utils/supabase/client";
 
 // ═══════════════════════════════════════════════════════════════════
@@ -27,7 +27,7 @@ import { getSupabaseClient } from "@/utils/supabase/client";
 //   ticket    → confirmação (ou cliente já tinha reserva ativa)
 // ═══════════════════════════════════════════════════════════════════
 
-const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d`;
+const API_BASE = `${apiBaseUrl}`;
 const AUTH_HEADER = { Authorization: `Bearer ${publicAnonKey}` };
 
 type Etapa = "cpf" | "pendencia" | "calendar" | "horario" | "ticket";

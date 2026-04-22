@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Plus, Package, Edit2, Trash2, Search } from 'lucide-react';
-import { projectId, publicAnonKey } from '@/utils/supabase/info';
+import { publicAnonKey, apiBaseUrl } from "@/utils/supabase/info";
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,7 +47,7 @@ export function InsumosView() {
   const carregarInsumos = async () => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/insumos`,
+        `${apiBaseUrl}/insumos`,
         {
           headers: {
             'Authorization': `Bearer ${publicAnonKey}`,
@@ -98,8 +98,8 @@ export function InsumosView() {
 
     try {
       const url = editingInsumo
-        ? `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/insumos/${editingInsumo.id}`
-        : `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/insumos`;
+        ? `${apiBaseUrl}/insumos/${editingInsumo.id}`
+        : `${apiBaseUrl}/insumos`;
 
       const response = await fetch(url, {
         method: editingInsumo ? 'PUT' : 'POST',
@@ -130,7 +130,7 @@ export function InsumosView() {
 
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/insumos/${id}`,
+        `${apiBaseUrl}/insumos/${id}`,
         {
           method: 'DELETE',
           headers: {

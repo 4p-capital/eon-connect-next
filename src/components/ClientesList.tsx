@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Search, Users, Building2, Phone, Mail, ChevronLeft, ChevronRight, Loader2, UserCircle, Filter, X, Copy, Check, Hash } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { projectId, publicAnonKey } from '@/utils/supabase/info';
+import { publicAnonKey, apiBaseUrl } from "@/utils/supabase/info";
 
 interface Cliente {
   id_cliente: number;
@@ -54,7 +54,7 @@ export function ClientesList() {
 
   // Fetch empreendimentos for filter
   useEffect(() => {
-    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/clientes-empreendimentos`, {
+    fetch(`${apiBaseUrl}/clientes-empreendimentos`, {
       headers: { Authorization: `Bearer ${publicAnonKey}` },
     })
       .then(r => r.json())
@@ -74,7 +74,7 @@ export function ClientesList() {
       if (filtroEmpreendimento) params.set('empreendimento', filtroEmpreendimento);
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/clientes?${params}`,
+        `${apiBaseUrl}/clientes?${params}`,
         { headers: { Authorization: `Bearer ${publicAnonKey}` } }
       );
       const result: ApiResponse = await response.json();

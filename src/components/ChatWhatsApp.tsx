@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
-import { projectId, publicAnonKey } from '@/utils/supabase/info';
+import { publicAnonKey, apiBaseUrl } from "@/utils/supabase/info";
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -257,7 +257,7 @@ export function ChatWhatsApp({ assistenciaId, telefoneCliente, nomeCliente }: Ch
       for (const phoneVariation of uniqueVariations) {
         console.log(`🔍 [${uniqueVariations.indexOf(phoneVariation) + 1}/${uniqueVariations.length}] Tentando: "${phoneVariation}"`);
         
-        const url = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/whatsapp/messages-by-phone/${encodeURIComponent(phoneVariation)}`;
+        const url = `${apiBaseUrl}/whatsapp/messages-by-phone/${encodeURIComponent(phoneVariation)}`;
         
         try {
           const response = await fetch(url, {
@@ -369,7 +369,7 @@ export function ChatWhatsApp({ assistenciaId, telefoneCliente, nomeCliente }: Ch
   // Carregar foto do contato
   const loadFotoContato = async () => {
     try {
-      const url = `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/whatsapp/contact-photo/${encodeURIComponent(telefoneCliente)}`;
+      const url = `${apiBaseUrl}/whatsapp/contact-photo/${encodeURIComponent(telefoneCliente)}`;
       
       const response = await fetch(url, {
         headers: {
@@ -408,7 +408,7 @@ export function ChatWhatsApp({ assistenciaId, telefoneCliente, nomeCliente }: Ch
       });
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-a8708d5d/chat/send`,
+        `${apiBaseUrl}/chat/send`,
         {
           method: 'POST',
           headers: {
