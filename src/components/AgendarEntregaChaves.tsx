@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { QRCodeDots } from "@/components/QRCodeDots";
 import { Calendar } from "@/components/ui/calendar";
+import { CpfValidator } from "@/components/CpfValidator";
 import { publicAnonKey, apiBaseUrl } from "@/utils/supabase/info";
 import { getSupabaseClient } from "@/utils/supabase/client";
 
@@ -71,14 +72,6 @@ type DiaDisponivel = {
   horarios: HorarioSlot[];
 };
 
-function maskCpf(value: string) {
-  const d = value.replace(/\D/g, "").slice(0, 11);
-  return d
-    .replace(/(\d{3})(\d)/, "$1.$2")
-    .replace(/(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
-    .replace(/(\d{3})\.(\d{3})\.(\d{3})(\d)/, "$1.$2.$3-$4");
-}
-
 function formatarDataExtenso(iso: string) {
   const d = new Date(iso + "T12:00:00");
   return d.toLocaleDateString("pt-BR", {
@@ -117,6 +110,7 @@ function dateParaIso(date: Date): string {
 export function AgendarEntregaChaves() {
   const [etapa, setEtapa] = useState<Etapa>("cpf");
   const [cpf, setCpf] = useState("");
+  const [cpfError, setCpfError] = useState("");
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -168,6 +162,7 @@ export function AgendarEntregaChaves() {
   const handleValidarCpf = useCallback(async () => {
     if (!cpfValido) return;
     setLoading(true);
+    setCpfError("");
     setErro(null);
     try {
       const resp = await fetch(`${API_BASE}/entregas/validar-cpf`, {
@@ -178,11 +173,11 @@ export function AgendarEntregaChaves() {
       const data = await resp.json();
 
       if (resp.status === 404) {
-        setErro("CPF não encontrado nos registros do Gran Santorini. Confira o número digitado.");
+        setCpfError("CPF não encontrado nos registros do Gran Santorini. Confira o número digitado.");
         return;
       }
       if (resp.status === 400) {
-        setErro("CPF inválido.");
+        setCpfError("CPF inválido.");
         return;
       }
       if (!data) throw new Error("Resposta inválida");
@@ -204,7 +199,7 @@ export function AgendarEntregaChaves() {
       setEtapa("calendar");
     } catch (err) {
       console.error(err);
-      setErro("Erro ao validar CPF. Tente novamente.");
+      setCpfError("Erro ao validar CPF. Tente novamente.");
     } finally {
       setLoading(false);
     }
@@ -401,41 +396,14 @@ export function AgendarEntregaChaves() {
 
         {/* ETAPA 1 — CPF */}
         {etapa === "cpf" && (
-          <div className="bg-white rounded-2xl border border-[var(--border)] p-6">
-            <h2 className="text-base font-semibold text-[var(--foreground)] mb-1">
-              Informe seu CPF
-            </h2>
-            <p className="text-sm text-[var(--muted-foreground)] mb-4">
-              Vamos verificar se você já pode agendar a entrega das suas chaves.
-            </p>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={cpf}
-              onChange={(e) => setCpf(maskCpf(e.target.value))}
-              placeholder="000.000.000-00"
-              className="w-full px-4 py-3 bg-white border border-[var(--border)] rounded-xl text-base text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-black/20 transition-all"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && cpfValido && !loading) {
-                  handleValidarCpf();
-                }
-              }}
-            />
-            <button
-              onClick={handleValidarCpf}
-              disabled={!cpfValido || loading}
-              className="mt-4 w-full py-3 rounded-xl bg-black text-white text-sm font-medium hover:bg-black/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Verificando...
-                </>
-              ) : (
-                "Continuar"
-              )}
-            </button>
-          </div>
+          <CpfValidator
+            cpfBusca={cpf}
+            setCpfBusca={setCpf}
+            cpfError={cpfError}
+            setCpfError={setCpfError}
+            buscandoCpf={loading}
+            onBuscarCPF={handleValidarCpf}
+          />
         )}
 
         {/* ETAPA 2 — PENDÊNCIA */}

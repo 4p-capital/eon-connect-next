@@ -379,12 +379,19 @@ export function EntregasSantoriniPendencias() {
                 <tbody className="divide-y divide-[var(--border)]">
                   {filtered.map((c) => (
                     <tr key={c.id} className="hover:bg-[var(--background-alt)] transition-colors">
-                      <td className="px-4 py-3 text-sm text-[var(--foreground)]">#{c.reserva}</td>
+                      <td className="px-4 py-3 text-sm text-[var(--foreground)]">
+                        <div className="flex items-center gap-1.5">
+                          <span>#{c.reserva}</span>
+                          {c.reserva >= 999000 && <TesteBadge />}
+                        </div>
+                      </td>
                       <td className="px-4 py-3">
                         <div>
-                          <p className="text-sm font-medium text-[var(--foreground)]">
-                            {c.cliente || "—"}
-                          </p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-sm font-medium text-[var(--foreground)]">
+                              {c.cliente || "—"}
+                            </p>
+                          </div>
                           <p className="text-[11px] text-[var(--muted-foreground)]">
                             {c.cpf_cnpj || ""}
                           </p>
@@ -441,11 +448,14 @@ export function EntregasSantoriniPendencias() {
                   key={c.id}
                   className="bg-white rounded-xl border border-[var(--border)] p-4 space-y-3"
                 >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-[var(--foreground)]">
-                        {c.cliente || "—"}
-                      </p>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="text-sm font-semibold text-[var(--foreground)]">
+                          {c.cliente || "—"}
+                        </p>
+                        {c.reserva >= 999000 && <TesteBadge />}
+                      </div>
                       <p className="text-[11px] text-[var(--muted-foreground)] mt-0.5">
                         #{c.reserva} • {c.cpf_cnpj || ""}
                       </p>
@@ -533,6 +543,17 @@ function EscopoAviso({
         Você pode editar apenas: <span className="font-semibold">{setores.join(", ")}</span>. Os demais campos ficam travados.
       </p>
     </div>
+  );
+}
+
+function TesteBadge() {
+  return (
+    <span
+      title="Cliente de teste (reserva >= 999000)"
+      className="inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-fuchsia-100 text-fuchsia-700 border border-fuchsia-200 rounded"
+    >
+      Teste
+    </span>
   );
 }
 

@@ -15,7 +15,7 @@ interface CpfValidatorProps {
   setCpfError: (value: string) => void;
   buscandoCpf: boolean;
   onBuscarCPF: () => void;
-  onVoltar: () => void;
+  onVoltar?: () => void;
 }
 
 // CPF formatting
@@ -418,13 +418,15 @@ export function CpfValidator({
 
           {/* Action buttons */}
           <div className="flex gap-3 pt-1">
-            <Button
-              onClick={onVoltar}
-              variant="outline"
-              className="h-12 px-4 rounded-xl border border-border hover:bg-background-secondary transition-colors"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
+            {onVoltar && (
+              <Button
+                onClick={onVoltar}
+                variant="outline"
+                className="h-12 px-4 rounded-xl border border-border hover:bg-background-secondary transition-colors"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+            )}
             <Button
               onClick={onBuscarCPF}
               disabled={validationState !== 'valid' || buscandoCpf}
