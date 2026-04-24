@@ -1520,11 +1520,20 @@ entregasRoutes.post("/entregas/pendencias/toggle", async (c) => {
       );
     }
 
+    // Qualquer ação (OK ou Pendência) conta como "verificação" pelo setor dono do campo.
+    // Contratos → carimba verificado_agehab_em; Financeiro → carimba verificado_financeiro_em.
+    const verificadoField =
+      setor === "contratos" ? "verificado_agehab_em" : "verificado_financeiro_em";
+    const agoraISO = new Date().toISOString();
+
     const { data: atualizado, error: errUp } = await supabase
       .from("clientes_entrega_santorini")
-      .update({ [campo]: valor })
+      .update({
+        [campo]: valor,
+        [verificadoField]: agoraISO,
+      })
       .eq("id", clienteId)
-      .select(`id, ${campo}`)
+      .select(`id, ${campo}, ${verificadoField}`)
       .maybeSingle();
 
     if (errUp) throw errUp;

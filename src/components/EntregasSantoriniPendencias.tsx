@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Lock,
+  HelpCircle,
 } from "lucide-react";
 import { usePermissionGuard } from "@/hooks/usePermissionGuard";
 import { useUser } from "@/contexts/UserContext";
@@ -32,10 +33,22 @@ interface Cliente {
   pendencia_agehab: boolean;
   pendencia_prosoluto: boolean;
   pendencia_jurosobra: boolean;
+  verificado_agehab_em: string | null;
+  verificado_financeiro_em: string | null;
 }
 
 type PendenciaField = "pendencia_agehab" | "pendencia_prosoluto" | "pendencia_jurosobra";
 type Setor = "contratos" | "financeiro";
+type TriState = "nao_verificado" | "ok" | "pendente";
+
+function computeState(cliente: Cliente, field: PendenciaField): TriState {
+  const verificadoEm =
+    field === "pendencia_agehab"
+      ? cliente.verificado_agehab_em
+      : cliente.verificado_financeiro_em;
+  if (!verificadoEm) return "nao_verificado";
+  return cliente[field] ? "pendente" : "ok";
+}
 
 const PENDENCIA_LABELS: Record<PendenciaField, string> = {
   pendencia_agehab: "AGEHAB?",
@@ -84,7 +97,7 @@ export function EntregasSantoriniPendencias() {
         const { data, error } = await (supabase
           .from("clientes_entrega_santorini") as ReturnType<typeof supabase.from>)
           .select(
-            "id, reserva, data_venda, bloco, unidade, cliente, cpf_cnpj, email, telefone, pendencia_agehab, pendencia_prosoluto, pendencia_jurosobra",
+            "id, reserva, data_venda, bloco, unidade, cliente, cpf_cnpj, email, telefone, pendencia_agehab, pendencia_prosoluto, pendencia_jurosobra, verificado_agehab_em, verificado_financeiro_em",
           )
           .order("bloco", { ascending: true })
           .order("unidade", { ascending: true });
@@ -99,7 +112,11 @@ export function EntregasSantoriniPendencias() {
     fetchClientes();
   }, [hasPermission]);
 
-  const togglePendencia = async (cliente: Cliente, field: PendenciaField) => {
+  const setPendencia = async (
+    cliente: Cliente,
+    field: PendenciaField,
+    nextValue: boolean,
+  ) => {
     if (!canByField[field]) {
       const setor = SETOR_LABEL[CAMPO_SETOR[field]];
       setAlertaAcesso(`Somente o setor ${setor} pode alterar este campo.`);
@@ -107,13 +124,24 @@ export function EntregasSantoriniPendencias() {
       return;
     }
 
-    const nextValue = !cliente[field];
     const cellKey = `${cliente.id}:${field}`;
     setUpdatingCell(cellKey);
 
-    // Otimista
+    const verificadoField =
+      field === "pendencia_agehab"
+        ? "verificado_agehab_em"
+        : "verificado_financeiro_em";
+    const agoraISO = new Date().toISOString();
+    const prevVerificadoEm = cliente[verificadoField];
+    const prevPendencia = cliente[field];
+
+    // Otimista: carimba tanto a pendência quanto o verificado_em do setor
     setClientes((prev) =>
-      prev.map((c) => (c.id === cliente.id ? { ...c, [field]: nextValue } : c)),
+      prev.map((c) =>
+        c.id === cliente.id
+          ? { ...c, [field]: nextValue, [verificadoField]: agoraISO }
+          : c,
+      ),
     );
 
     try {
@@ -140,8 +168,13 @@ export function EntregasSantoriniPendencias() {
       }
     } catch (err) {
       console.error("Erro ao atualizar pendência:", err);
+      // Rollback
       setClientes((prev) =>
-        prev.map((c) => (c.id === cliente.id ? { ...c, [field]: cliente[field] } : c)),
+        prev.map((c) =>
+          c.id === cliente.id
+            ? { ...c, [field]: prevPendencia, [verificadoField]: prevVerificadoEm }
+            : c,
+        ),
       );
       setAlertaAcesso(err instanceof Error ? err.message : "Erro ao atualizar");
       setTimeout(() => setAlertaAcesso(null), 3000);
@@ -165,11 +198,11 @@ export function EntregasSantoriniPendencias() {
   const stats = useMemo(
     () => ({
       total: clientes.length,
-      agehab: clientes.filter((c) => c.pendencia_agehab).length,
-      prosoluto: clientes.filter((c) => c.pendencia_prosoluto).length,
-      jurosobra: clientes.filter((c) => c.pendencia_jurosobra).length,
-      semPendencias: clientes.filter(
-        (c) => !c.pendencia_agehab && !c.pendencia_prosoluto && !c.pendencia_jurosobra,
+      agehabNaoVerif: clientes.filter((c) => !c.verificado_agehab_em).length,
+      agehabPendente: clientes.filter((c) => c.pendencia_agehab).length,
+      financeiroNaoVerif: clientes.filter((c) => !c.verificado_financeiro_em).length,
+      financeiroPendente: clientes.filter(
+        (c) => c.pendencia_prosoluto || c.pendencia_jurosobra,
       ).length,
     }),
     [clientes],
@@ -233,31 +266,33 @@ export function EntregasSantoriniPendencias() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3 rounded-xl border bg-white border-[var(--border)]">
               <div className="flex items-center gap-2 mb-1">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                <span className="text-xs font-medium text-emerald-700">Sem pendências</span>
+                <HelpCircle className="w-4 h-4 text-slate-500" />
+                <span className="text-xs font-medium text-slate-700">AGEHAB aguardando</span>
               </div>
-              <p className="text-xl font-bold text-emerald-700">{stats.semPendencias}</p>
+              <p className="text-xl font-bold text-slate-700">{stats.agehabNaoVerif}</p>
+              <p className="text-[10px] text-[var(--muted-foreground)] mt-0.5">não verificados</p>
             </div>
             <div className="p-3 rounded-xl border bg-white border-[var(--border)]">
               <div className="flex items-center gap-2 mb-1">
                 <AlertTriangle className="w-4 h-4 text-amber-600" />
-                <span className="text-xs font-medium text-amber-700">Com pendência AGEHAB</span>
+                <span className="text-xs font-medium text-amber-700">AGEHAB com pendência</span>
               </div>
-              <p className="text-xl font-bold text-amber-700">{stats.agehab}</p>
+              <p className="text-xl font-bold text-amber-700">{stats.agehabPendente}</p>
+            </div>
+            <div className="p-3 rounded-xl border bg-white border-[var(--border)]">
+              <div className="flex items-center gap-2 mb-1">
+                <HelpCircle className="w-4 h-4 text-slate-500" />
+                <span className="text-xs font-medium text-slate-700">Financeiro aguardando</span>
+              </div>
+              <p className="text-xl font-bold text-slate-700">{stats.financeiroNaoVerif}</p>
+              <p className="text-[10px] text-[var(--muted-foreground)] mt-0.5">não verificados</p>
             </div>
             <div className="p-3 rounded-xl border bg-white border-[var(--border)]">
               <div className="flex items-center gap-2 mb-1">
                 <AlertTriangle className="w-4 h-4 text-amber-600" />
-                <span className="text-xs font-medium text-amber-700">Com pendência PRÓ-SOLUTO</span>
+                <span className="text-xs font-medium text-amber-700">Financeiro com pendência</span>
               </div>
-              <p className="text-xl font-bold text-amber-700">{stats.prosoluto}</p>
-            </div>
-            <div className="p-3 rounded-xl border bg-white border-[var(--border)]">
-              <div className="flex items-center gap-2 mb-1">
-                <AlertTriangle className="w-4 h-4 text-amber-600" />
-                <span className="text-xs font-medium text-amber-700">Com pendência Juros Obra</span>
-              </div>
-              <p className="text-xl font-bold text-amber-700">{stats.jurosobra}</p>
+              <p className="text-xl font-bold text-amber-700">{stats.financeiroPendente}</p>
             </div>
           </div>
         </div>
@@ -382,12 +417,12 @@ export function EntregasSantoriniPendencias() {
                         return (
                           <td key={field} className="px-4 py-3">
                             <div className="flex justify-center">
-                              <Toggle
-                                on={c[field]}
+                              <TriStateControl
+                                state={computeState(c, field)}
                                 busy={updatingCell === cellKey}
                                 locked={!allowed}
                                 lockedTitle={`Apenas ${SETOR_LABEL[CAMPO_SETOR[field]]} pode alterar este campo`}
-                                onClick={() => togglePendencia(c, field)}
+                                onSet={(valor) => setPendencia(c, field, valor)}
                               />
                             </div>
                           </td>
@@ -438,12 +473,12 @@ export function EntregasSantoriniPendencias() {
                           <span className="text-[10px] font-medium text-[var(--muted-foreground)] uppercase tracking-wider text-center">
                             {PENDENCIA_LABELS[field]}
                           </span>
-                          <Toggle
-                            on={c[field]}
+                          <TriStateControl
+                            state={computeState(c, field)}
                             busy={updatingCell === cellKey}
                             locked={!allowed}
                             lockedTitle={`Apenas ${SETOR_LABEL[CAMPO_SETOR[field]]}`}
-                            onClick={() => togglePendencia(c, field)}
+                            onSet={(valor) => setPendencia(c, field, valor)}
                           />
                         </div>
                       );
@@ -501,52 +536,75 @@ function EscopoAviso({
   );
 }
 
-function Toggle({
-  on,
+function TriStateControl({
+  state,
   busy,
   locked,
   lockedTitle,
-  onClick,
+  onSet,
 }: {
-  on: boolean;
+  state: TriState;
   busy: boolean;
   locked: boolean;
   lockedTitle?: string;
-  onClick: () => void;
+  onSet: (pendencia: boolean) => void;
 }) {
+  const statusLabel =
+    state === "nao_verificado"
+      ? { text: "Não verificado", cls: "text-slate-400" }
+      : state === "ok"
+        ? { text: "Verificado", cls: "text-emerald-600" }
+        : { text: "Com pendência", cls: "text-orange-600" };
+
+  const okActive = state === "ok";
+  const pendenteActive = state === "pendente";
+
+  const baseBtn =
+    "px-2 py-1 text-[11px] font-medium rounded-md transition-all disabled:opacity-50 flex items-center gap-1";
+
   return (
     <div className="inline-flex flex-col items-center gap-1">
       <span
-        className={`text-[11px] font-semibold uppercase tracking-wide transition-colors ${
-          locked
-            ? "text-gray-400"
-            : on
-              ? "text-orange-500"
-              : "text-emerald-600"
-        }`}
+        className={`text-[10px] font-semibold uppercase tracking-wide ${statusLabel.cls}`}
       >
-        {on ? "Sim" : "Não"}
+        {statusLabel.text}
       </span>
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={busy}
-        title={locked ? lockedTitle : undefined}
-        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-          locked
-            ? "bg-gray-300 cursor-not-allowed"
-            : on
-              ? "bg-orange-500"
-              : "bg-emerald-500"
-        } ${busy ? "opacity-50" : ""}`}
-        aria-label={on ? "Tem pendência" : "Sem pendência"}
-      >
-        <span
-          className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
-            on ? "translate-x-5" : "translate-x-0.5"
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          disabled={busy || locked}
+          onClick={() => onSet(false)}
+          title={locked ? lockedTitle : "Verificado: sem pendência"}
+          aria-pressed={okActive}
+          className={`${baseBtn} ${
+            locked
+              ? "bg-gray-100 text-gray-300 cursor-not-allowed"
+              : okActive
+                ? "bg-emerald-500 text-white shadow-sm"
+                : "bg-white border border-gray-200 text-gray-500 hover:border-emerald-400 hover:text-emerald-600"
           }`}
-        />
-      </button>
+        >
+          <CheckCircle2 className="w-3 h-3" />
+          OK
+        </button>
+        <button
+          type="button"
+          disabled={busy || locked}
+          onClick={() => onSet(true)}
+          title={locked ? lockedTitle : "Verificado: com pendência"}
+          aria-pressed={pendenteActive}
+          className={`${baseBtn} ${
+            locked
+              ? "bg-gray-100 text-gray-300 cursor-not-allowed"
+              : pendenteActive
+                ? "bg-orange-500 text-white shadow-sm"
+                : "bg-white border border-gray-200 text-gray-500 hover:border-orange-400 hover:text-orange-600"
+          }`}
+        >
+          <AlertTriangle className="w-3 h-3" />
+          Pend.
+        </button>
+      </div>
     </div>
   );
 }

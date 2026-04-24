@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Users, Shield, Search, Loader2, AlertCircle, Package, KeyRound } from 'lucide-react';
+import { Users, Shield, Search, Loader2, AlertCircle, Package, KeyRound, Bell } from 'lucide-react';
 import { usePermissionGuard } from '@/hooks/usePermissionGuard';
 import { publicAnonKey, apiBaseUrl } from "@/utils/supabase/info";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { GerenciarMateriais } from '@/components/GerenciarMateriais';
+import { NotificacoesManyChatLogs } from '@/components/NotificacoesManyChatLogs';
 import { withRetry } from '@/utils/errorHandler';
 import { PermissionsDrawer } from '@/components/PermissionsDrawer';
 import type { UserPermissions } from '@/lib/permissions';
@@ -316,7 +317,7 @@ export function Gerenciamento() {
 
         {/* Tabs */}
         <Tabs defaultValue="usuarios" className="w-full">
-          <TabsList className="grid w-full max-w-sm grid-cols-2 bg-white p-1.5 h-auto shadow-sm border border-[#E5E7EB] rounded-xl mb-6">
+          <TabsList className="grid w-full max-w-xl grid-cols-3 bg-white p-1.5 h-auto shadow-sm border border-[#E5E7EB] rounded-xl mb-6">
             <TabsTrigger
               value="usuarios"
               className="flex items-center justify-center gap-2 data-[state=active]:bg-black data-[state=active]:text-white py-2.5 rounded-lg transition-all duration-200"
@@ -330,6 +331,13 @@ export function Gerenciamento() {
             >
               <Package className="h-4 w-4" />
               Materiais
+            </TabsTrigger>
+            <TabsTrigger
+              value="notificacoes"
+              className="flex items-center justify-center gap-2 data-[state=active]:bg-black data-[state=active]:text-white py-2.5 rounded-lg transition-all duration-200"
+            >
+              <Bell className="h-4 w-4" />
+              Notificações
             </TabsTrigger>
           </TabsList>
 
@@ -471,17 +479,28 @@ export function Gerenciamento() {
               <div className="mb-6">
                 <h2 className="text-xl font-semibold mb-2 text-[#1B1B1B]">Catálogo de Materiais</h2>
                 <p className="text-[#4B5563]">
-                  Gerencie o catálogo de materiais utilizados nos reparos de assistência técnica. 
+                  Gerencie o catálogo de materiais utilizados nos reparos de assistência técnica.
                   Você pode adicionar, editar ou remover materiais conforme necessário.
                 </p>
               </div>
-              <GerenciarMateriais 
-                aberto={true} 
-                aoFechar={() => {}} 
-                aoAtualizar={() => console.log('Materiais atualizados')} 
+              <GerenciarMateriais
+                aberto={true}
+                aoFechar={() => {}}
+                aoAtualizar={() => console.log('Materiais atualizados')}
                 modoEmbutido={true}
               />
             </div>
+          </TabsContent>
+
+          {/* Notificações Tab */}
+          <TabsContent value="notificacoes" className="mt-0">
+            <div className="bg-white rounded-xl shadow-sm border border-[#E5E7EB] p-6 mb-6">
+              <h2 className="text-xl font-semibold mb-1 text-[#1B1B1B]">Notificações ManyChat</h2>
+              <p className="text-[#4B5563] text-sm">
+                Histórico de disparos de pendências (AGEHAB / Financeiro) enviados pelo ManyChat. Agrupados por bloco de execução (cada rodada do cron = um bloco).
+              </p>
+            </div>
+            <NotificacoesManyChatLogs />
           </TabsContent>
 
         </Tabs>
