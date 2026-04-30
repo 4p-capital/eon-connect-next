@@ -3,8 +3,9 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { TrendingUp, BarChart3, PieChart as PieChartIcon, Building2, Package, Users, Star, AlertCircle, Calendar, Filter, X, ClipboardList, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { TrendingUp, BarChart3, PieChart as PieChartIcon, Building2, Package, Users, Star, AlertCircle, Calendar, Filter, X, ClipboardList, CheckCircle2, ShieldCheck, ListFilter } from 'lucide-react';
 import { publicAnonKey, apiBaseUrl } from "@/utils/supabase/info";
+import { NpsAvaliacoesSheet } from "./NpsAvaliacoesSheet";
 
 const CORES_GRAFICO = [
   '#3B82F6', '#111111', '#10B981', '#F59E0B',
@@ -67,6 +68,7 @@ export function DashboardAssistencia() {
   const [filtroAtivo, setFiltroAtivo] = useState(false);
   const [paginaInsumos, setPaginaInsumos] = useState(1);
   const ITENS_POR_PAGINA_INSUMOS = 50;
+  const [npsSheetOpen, setNpsSheetOpen] = useState(false);
 
   // Abort controller para cancelar requests em voo
   const abortRef = useRef<AbortController | null>(null);
@@ -631,29 +633,54 @@ export function DashboardAssistencia() {
             {/* NPS */}
             <Card className="bg-white border border-gray-200">
               <CardHeader className="p-3 sm:p-4 pb-2">
-                <div className="flex items-center gap-2">
-                  <Star className="h-4 w-4 text-yellow-600" />
-                  <div>
-                    <CardTitle className="text-sm sm:text-base text-gray-900">Avaliacao NPS</CardTitle>
-                    <CardDescription className="text-xs">Media geral de satisfacao</CardDescription>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Star className="h-4 w-4 text-yellow-600" />
+                    <div>
+                      <CardTitle className="text-sm sm:text-base text-gray-900">Avaliacao NPS</CardTitle>
+                      <CardDescription className="text-xs">Media geral de satisfacao</CardDescription>
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setNpsSheetOpen(true)}
+                    className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium bg-yellow-50 text-yellow-800 border border-yellow-200 rounded-md hover:bg-yellow-100 transition-colors"
+                    title="Ver lista detalhada de avaliacoes"
+                  >
+                    <ListFilter className="h-3 w-3" />
+                    Ver detalhes
+                  </button>
                 </div>
               </CardHeader>
               <CardContent className="p-3 sm:p-4 pt-0">
                 {nps?.media !== null && nps?.media !== undefined && (nps?.totalAvaliacoes || 0) > 0 ? (
-                  <div className="flex flex-col items-center justify-center h-[200px]">
+                  <button
+                    type="button"
+                    onClick={() => setNpsSheetOpen(true)}
+                    className="w-full flex flex-col items-center justify-center h-[200px] rounded-lg hover:bg-yellow-50/50 transition-colors group cursor-pointer"
+                    title="Clique para ver as avaliacoes detalhadas"
+                  >
                     <div className="flex items-center gap-2 mb-4">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <Star key={star} className={`h-8 w-8 ${star <= Math.round(nps!.media!) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`} />
-                      ))}
+                      {[1, 2, 3, 4, 5].map((star) => {
+                        const escala5 = (nps!.media! / 10) * 5;
+                        return (
+                          <Star
+                            key={star}
+                            className={`h-8 w-8 ${star <= Math.round(escala5) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`}
+                          />
+                        );
+                      })}
                     </div>
                     <div className="text-center">
-                      <p className="text-4xl font-bold text-gray-900 mb-1">{nps!.media!.toFixed(1)}</p>
+                      <p className="text-4xl font-bold text-gray-900 mb-1 group-hover:text-yellow-700 transition-colors">{nps!.media!.toFixed(1)}</p>
                       <p className="text-sm text-gray-600">
                         Baseado em {nps!.totalAvaliacoes} {nps!.totalAvaliacoes === 1 ? 'avaliacao' : 'avaliacoes'}
                       </p>
+                      <p className="text-[10px] text-yellow-700 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        Clique para ver detalhes →
+                      </p>
                     </div>
-                  </div>
+                  </button>
                 ) : <div className="flex items-center justify-center h-[200px] text-xs text-gray-500">Nenhuma avaliacao disponivel</div>}
               </CardContent>
             </Card>
@@ -822,6 +849,13 @@ export function DashboardAssistencia() {
         </div>
 
       </div>
+
+      <NpsAvaliacoesSheet
+        open={npsSheetOpen}
+        onOpenChange={setNpsSheetOpen}
+        dataInicio={filtroAtivo ? dataInicio : undefined}
+        dataFim={filtroAtivo ? dataFim : undefined}
+      />
     </div>
   );
 }

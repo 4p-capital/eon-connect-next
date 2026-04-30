@@ -673,6 +673,180 @@ app.get("/make-server-a8708d5d/dashboard-stats", async (c) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
+// ⭐ AVALIAÇÕES NPS — Lista detalhada com filtros e paginação
+// Usa o mesmo recorte de período do dashboard (responded_at).
+// ═══════════════════════════════════════════════════════════════════
+app.get("/make-server-a8708d5d/avaliacoes-nps", async (c) => {
+  try {
+    const dataInicio = c.req.query('dataInicio');
+    const dataFim = c.req.query('dataFim');
+    const minNota = c.req.query('minNota');
+    const maxNota = c.req.query('maxNota');
+    const apenasComComentario = c.req.query('apenasComComentario') === 'true';
+    const search = (c.req.query('search') || '').trim();
+    const empreendimento = (c.req.query('empreendimento') || '').trim();
+    const responsavel = (c.req.query('responsavel') || '').trim();
+    const categoria = (c.req.query('categoria') || '').trim();
+    const ordem = c.req.query('ordem') === 'nota_asc' ? 'nota_asc'
+      : c.req.query('ordem') === 'nota_desc' ? 'nota_desc'
+      : 'data_desc';
+    const page = Math.max(1, parseInt(c.req.query('page') || '1'));
+    const limit = Math.min(200, Math.max(1, parseInt(c.req.query('limit') || '50')));
+
+    let query = supabase
+      .from('avaliacoes_nps')
+      .select(`
+        id,
+        nota,
+        comentario,
+        responded_at,
+        created_at,
+        status,
+        id_assistencia,
+        assistencia_finalizada_id,
+        responsaveis,
+        "Assistência Técnica":id_assistencia (
+          categoria_reparo,
+          id_cliente,
+          clientes:id_cliente (
+            proprietario,
+            cpf,
+            empreendimento,
+            bloco,
+            unidade
+          )
+        )
+      `, { count: 'exact' })
+      .eq('status', 'respondida');
+
+    if (dataInicio) query = query.gte('responded_at', `${dataInicio}T00:00:00-03:00`);
+    if (dataFim) query = query.lte('responded_at', `${dataFim}T23:59:59-03:00`);
+    if (minNota) query = query.gte('nota', parseInt(minNota));
+    if (maxNota) query = query.lte('nota', parseInt(maxNota));
+    if (apenasComComentario) query = query.not('comentario', 'is', null).neq('comentario', '');
+
+    if (ordem === 'nota_asc') query = query.order('nota', { ascending: true, nullsFirst: false });
+    else if (ordem === 'nota_desc') query = query.order('nota', { ascending: false, nullsFirst: false });
+    else query = query.order('responded_at', { ascending: false, nullsFirst: false });
+
+    // Buscamos um pool maior para permitir filtragem em memória dos campos
+    // que dependem do JOIN (proprietário, CPF, empreendimento, responsável, categoria),
+    // já que filtros relacionais via PostgREST têm limitações com aliases.
+    const POOL_SIZE = 1000;
+    const { data: rows, count, error } = await query.range(0, POOL_SIZE - 1);
+
+    if (error) {
+      console.error('❌ Erro em /avaliacoes-nps:', error);
+      return c.json({ error: `Erro ao buscar avaliações: ${error.message}` }, 500);
+    }
+
+    type Row = any;
+    const flat = (rows || []).map((r: Row) => {
+      const at = r['Assistência Técnica'] || {};
+      const cli = at?.clientes || {};
+      return {
+        id: r.id,
+        nota: r.nota,
+        comentario: r.comentario,
+        responded_at: r.responded_at,
+        created_at: r.created_at,
+        id_assistencia: r.id_assistencia,
+        assistencia_finalizada_id: r.assistencia_finalizada_id,
+        responsaveis: Array.isArray(r.responsaveis) ? r.responsaveis : (r.responsaveis ? [r.responsaveis] : []),
+        categoria_reparo: at?.categoria_reparo || null,
+        proprietario: cli?.proprietario || null,
+        cpf: cli?.cpf || null,
+        empreendimento: cli?.empreendimento || null,
+        bloco: cli?.bloco || null,
+        unidade: cli?.unidade || null,
+      };
+    });
+
+    const norm = (s: any) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const onlyDigits = (s: any) => String(s || '').replace(/\D/g, '');
+
+    const searchN = norm(search);
+    const searchDigits = onlyDigits(search);
+    const empN = norm(empreendimento);
+    const respN = norm(responsavel);
+    const catN = norm(categoria);
+
+    const filtered = flat.filter((row: any) => {
+      if (search) {
+        const matchProp = norm(row.proprietario).includes(searchN);
+        const matchCpf = searchDigits ? onlyDigits(row.cpf).includes(searchDigits) : false;
+        const matchComentario = norm(row.comentario).includes(searchN);
+        if (!matchProp && !matchCpf && !matchComentario) return false;
+      }
+      if (empreendimento && norm(row.empreendimento) !== empN) return false;
+      if (categoria && norm(row.categoria_reparo) !== catN) return false;
+      if (responsavel) {
+        const has = (row.responsaveis || []).some((r: any) => norm(r) === respN);
+        if (!has) return false;
+      }
+      return true;
+    });
+
+    const totalFiltered = filtered.length;
+    const offset = (page - 1) * limit;
+    const pageItems = filtered.slice(offset, offset + limit);
+
+    // Agregados também sobre o conjunto filtrado (para refletir os filtros aplicados)
+    const notas = filtered.map((r: any) => Number(r.nota)).filter((n: number) => !Number.isNaN(n));
+    const total = notas.length;
+    const media = total > 0 ? notas.reduce((a: number, b: number) => a + b, 0) / total : null;
+
+    const distribuicao: Record<string, number> = {};
+    for (let i = 1; i <= 10; i++) distribuicao[String(i)] = 0;
+    for (const n of notas) {
+      const k = String(n);
+      if (distribuicao[k] !== undefined) distribuicao[k] += 1;
+    }
+
+    // Classificação NPS clássica (0-10): Detrator (0-6), Neutro (7-8), Promotor (9-10)
+    const detratores = notas.filter((n: number) => n <= 6).length;
+    const neutros = notas.filter((n: number) => n === 7 || n === 8).length;
+    const promotores = notas.filter((n: number) => n >= 9).length;
+    const npsScore = total > 0 ? Math.round(((promotores - detratores) / total) * 100) : null;
+
+    // Listas únicas para popular filtros no front (do pool, não da página)
+    const empreendimentosUnicos = Array.from(new Set(flat.map((r: any) => r.empreendimento).filter(Boolean))).sort();
+    const responsaveisUnicos = Array.from(new Set(flat.flatMap((r: any) => r.responsaveis || []).filter(Boolean))).sort();
+    const categoriasUnicas = Array.from(new Set(flat.map((r: any) => r.categoria_reparo).filter(Boolean))).sort();
+
+    return c.json({
+      data: pageItems,
+      pagination: {
+        page,
+        limit,
+        total: totalFiltered,
+        totalPool: count ?? flat.length,
+        hasMore: offset + pageItems.length < totalFiltered,
+        truncatedPool: (count ?? 0) > POOL_SIZE,
+      },
+      agregados: {
+        media: media !== null ? Number(media.toFixed(2)) : null,
+        total,
+        distribuicao,
+        detratores,
+        neutros,
+        promotores,
+        npsScore,
+      },
+      filtrosDisponiveis: {
+        empreendimentos: empreendimentosUnicos,
+        responsaveis: responsaveisUnicos,
+        categorias: categoriasUnicas,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('❌ Erro geral em /avaliacoes-nps:', error);
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
 // 🏥 ROTA DE SOLICITAÇÃO PÚBLICA (SIMPLIFICADA)
 // ═══════════════════════════════════════════════════════════════════
 
