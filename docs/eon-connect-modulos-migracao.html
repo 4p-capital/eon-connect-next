@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Eon Connect — Módulos de Migração para a OctaBuild</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'neutral', securityLevel: 'loose' });
+</script>
+<style>
+  :root {
+    --fg: #1b1b1b;
+    --muted: #4b5563;
+    --bg: #ffffff;
+    --bg-alt: #f9fafb;
+    --border: #e5e7eb;
+    --accent: #111827;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    line-height: 1.55;
+    font-size: 14px;
+  }
+  main {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 56px 64px;
+  }
+  h1, h2, h3, h4 {
+    color: var(--accent);
+    margin-top: 1.6em;
+    margin-bottom: 0.5em;
+    line-height: 1.25;
+  }
+  h1 { font-size: 28px; border-bottom: 2px solid var(--border); padding-bottom: 12px; margin-top: 0; }
+  h2 { font-size: 22px; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-top: 2em; }
+  h3 { font-size: 17px; }
+  h4 { font-size: 15px; color: var(--muted); }
+  p { margin: 0.6em 0; }
+  ul, ol { margin: 0.6em 0; padding-left: 1.4em; }
+  li { margin: 0.3em 0; }
+  blockquote {
+    border-left: 3px solid var(--border);
+    margin: 1em 0;
+    padding: 0.6em 1.2em;
+    background: var(--bg-alt);
+    color: #374151;
+    font-style: normal;
+  }
+  code {
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: ui-monospace, "SF Mono", Consolas, "Liberation Mono", monospace;
+    font-size: 0.92em;
+  }
+  pre {
+    background: var(--code-bg);
+    padding: 12px 16px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1em 0;
+    font-size: 13px;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    background: var(--bg-alt);
+    font-weight: 600;
+  }
+  tr:nth-child(even) td { background: #fcfcfd; }
+  .meta {
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .cover {
+    background: linear-gradient(180deg, #fafafa, #ffffff);
+    padding: 60px 0 40px;
+    border-radius: 8px;
+    margin-bottom: 32px;
+    text-align: left;
+  }
+  .cover .doc-title {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--accent);
+    margin: 0 0 12px;
+    line-height: 1.15;
+  }
+  .cover .doc-sub {
+    font-size: 16px;
+    color: var(--muted);
+    margin: 0 0 24px;
+  }
+  .pill {
+    display: inline-block;
+    background: #eef2ff;
+    color: #3730a3;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+    margin-right: 6px;
+  }
+  .mermaid {
+    background: var(--bg-alt);
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    margin: 1em 0;
+    text-align: center;
+  }
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 2.5em 0;
+  }
+  .ascii-rel {
+    background: var(--code-bg);
+    padding: 14px 18px;
+    border-radius: 6px;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre;
+    overflow-x: auto;
+  }
+  /* Estilos pra impressão (Ctrl+P → Salvar como PDF) */
+  @media print {
+    main { padding: 24px 32px; max-width: none; }
+    h1, h2, h3 { page-break-after: avoid; }
+    table, blockquote, pre, .mermaid { page-break-inside: avoid; }
+    h2 { page-break-before: auto; }
+    .no-print { display: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+<div class="cover">
+  <div class="doc-title">Eon Connect — Módulos de Migração para a OctaBuild</div>
+  <div class="doc-sub">Documento técnico para replicação dos módulos <strong>Assistência Técnica</strong> e <strong>Entrega de Chaves</strong> dentro do ERP OctaBuild.</div>
+  <div>
+    <span class="pill">Versão 1.0</span>
+    <span class="pill">Abril/2026</span>
+    <span class="pill">Stack: Next.js + Supabase + Edge Functions</span>
+  </div>
+</div>
+
+<h2>1. Visão Geral</h2>
+<p>O <strong>Eon Connect</strong> é a plataforma operacional da BP Incorporadora que conecta os setores internos (Contratos, Financeiro, Engenharia, Pós-venda, Assistência) ao cliente durante toda a jornada pós-venda. Ele centraliza fluxos que antes estavam espalhados em planilhas, WhatsApp pessoal e sistemas desconectados.</p>
+<p>Este documento descreve apenas os <strong>dois módulos que serão migrados para o ERP OctaBuild</strong>:</p>
+<ol>
+  <li><strong>Assistência Técnica</strong> — gestão de chamados de reparos pós-obra, com termo digital assinado e devolução de PDF para o ERP.</li>
+  <li><strong>Entrega de Chaves</strong> — fluxo completo de entrega de unidades novas (Gran Santorini), com triagem de pendências, agendamento público, vistoria presencial e assinatura digital.</li>
+</ol>
+<p>Ambos compartilham a mesma base técnica (Postgres no Supabase, Edge Functions em Hono, autenticação via Supabase Auth), mas operam em tabelas e fluxos independentes.</p>
+
+<h2>2. Integrações externas (glossário)</h2>
+<table>
+  <thead><tr><th>Integração</th><th>Uso no Eon Connect</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Sienge</strong></td><td>ERP atual da BP (CRM de clientes, contratos, anexos por unidade). O Eon Connect lê dados de cliente e devolve PDFs assinados.</td></tr>
+    <tr><td><strong>Clicksign</strong></td><td>Plataforma de assinatura eletrônica. Geração de envelope, link de assinatura, webhook de confirmação, download do PDF assinado.</td></tr>
+    <tr><td><strong>Z-API</strong></td><td>Gateway WhatsApp não-oficial (envia link de assinatura, link de NPS, QR Code de agendamento).</td></tr>
+    <tr><td><strong>ManyChat</strong></td><td>Plataforma de mensageria automatizada. Usado para notificar clientes com pendências de entrega.</td></tr>
+    <tr><td><strong>OpenAI (GPT-4o-mini)</strong></td><td>Análise automática de risco do chamado de Assistência (Moderado / Médio / Crítico).</td></tr>
+    <tr><td><strong>n8n</strong></td><td>Automações externas que alimentam o banco (popula <code>id_manychat</code>, sincroniza dados).</td></tr>
+    <tr><td><strong>Supabase Realtime</strong></td><td>Atualização em tempo real de calendários e listas (sem polling).</td></tr>
+    <tr><td><strong>pg_cron + pg_net</strong></td><td>Agendamento de jobs no Postgres que disparam HTTP para Edge Functions.</td></tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h2>3. Módulo: Assistência Técnica</h2>
+
+<h3>3.1 Propósito</h3>
+<p>Gerenciar chamados de reparos pós-obra dos clientes BP. O cliente abre solicitação (foto + descrição) → equipe técnica vistoria e repara → cliente assina termo digital de aceite → PDF assinado é anexado no Sienge na unidade correta → cliente avalia o serviço (NPS).</p>
+
+<h3>3.2 Atores</h3>
+<table>
+  <thead><tr><th>Ator</th><th>Interação principal</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Cliente final</strong></td><td>Abre app público, identifica-se por CPF, descreve problema com foto, recebe link de assinatura por WhatsApp, assina, avalia (NPS).</td></tr>
+    <tr><td><strong>Equipe BP (técnicos / gestores)</strong></td><td>Trabalha em painel Kanban: agenda vistoria → agenda reparo → finaliza com fotos e materiais → envia para assinatura.</td></tr>
+    <tr><td><strong>Síndico</strong></td><td>Visualiza assistências do empreendimento (acesso opcional).</td></tr>
+    <tr><td><strong>OpenAI (GPT)</strong></td><td>Classifica risco automaticamente quando o chamado é aberto.</td></tr>
+    <tr><td><strong>Clicksign</strong></td><td>Gera envelope, coleta assinatura, dispara webhook.</td></tr>
+    <tr><td><strong>Sienge</strong></td><td>Recebe o PDF assinado e o anexa no contrato/unidade do cliente.</td></tr>
+  </tbody>
+</table>
+
+<h3>3.3 Fluxo narrativo</h3>
+<blockquote>
+<p>O cliente abre o app público de Assistência Técnica e digita o CPF. O backend valida o CPF (mod-11) e busca em <code>clientes</code>; se não existir, cria. O cliente aceita os termos de privacidade, escolhe o empreendimento (lista vinda do Sienge), descreve o problema, anexa uma foto obrigatória e envia.</p>
+<p>Ao chegar no servidor, a solicitação é gravada em <code>Assistência Técnica</code> (sim, esse é o nome literal da tabela, com espaço e acento). De forma assíncrona, a Edge Function chama a <strong>API da OpenAI</strong> para classificar o risco (Moderado/Médio/Crítico) e grava em <code>gpt_analises</code>. Em paralelo, a Z-API envia notificação para o grupo técnico no WhatsApp.</p>
+<p>A equipe técnica entra no painel <code>/gerenciamento-assistencia</code>, vê o chamado no Kanban (coluna "Abertos"), agenda uma data de vistoria. Após a vistoria, agenda o reparo. No dia do reparo, o técnico finaliza: registra os responsáveis, materiais usados (<code>assistencia_finalizada_itens</code>), tira foto do reparo concluído. Isso cria o registro em <code>assistencia_finalizada</code>.</p>
+<p>Quando finalizado, o sistema gera um termo PDF a partir de um template HTML, faz upload para o <strong>Storage</strong> (<code>make-a8708d5d-termos-assistencia</code>) e cria um envelope no <strong>Clicksign</strong> com o cliente como signatário. O cliente recebe pelo WhatsApp (Z-API) o link de assinatura. O envelope é rastreado em <code>clicksign_envelopes</code>.</p>
+<p>Cliente assina → Clicksign dispara o webhook <code>document_closed</code> no Eon Connect → o sistema baixa o PDF assinado, salva no Storage e envia para o <strong>Sienge</strong> via API: localiza o cliente por CPF, encontra o contrato da unidade e anexa o PDF como documento customizado. O termo passa a ter <code>enviado_sienge=true</code>.</p>
+<p>Em seguida, é gerado um link de NPS (token único) que é enviado ao cliente também por WhatsApp. O cliente avalia de 1 a 10 e a resposta vai para <code>avaliacoes_nps</code>.</p>
+<p><strong>Cenário de aceitação tácita:</strong> se o cliente não assina dentro de 7 dias, o webhook <code>deadline</code> do Clicksign dispara, o termo é marcado como <code>tipo_finalizacao='vencida'</code> (com carimbo de aceite tácito no PDF) e segue o mesmo fluxo de envio para o Sienge.</p>
+</blockquote>
+
+<h3>3.4 Modelo de dados — tabelas core</h3>
+<table>
+  <thead><tr><th>Tabela</th><th>Função</th></tr></thead>
+  <tbody>
+    <tr><td><code>Assistência Técnica</code></td><td>Solicitação principal (chamado). Status: <code>Abertos</code>, <code>Vistoria agendada</code>, <code>Reparo agendado</code>, <code>Aguardando assinatura</code>, <code>Finalizado</code>.</td></tr>
+    <tr><td><code>clientes</code></td><td>Cadastro de proprietários (CPF, nome, telefone, email, bloco, unidade, empreendimento, síndico).</td></tr>
+    <tr><td><code>empreendimentos</code></td><td>Catálogo de empreendimentos.</td></tr>
+    <tr><td><code>sindicos</code></td><td>Cadastro de síndicos.</td></tr>
+    <tr><td><code>gpt_analises</code></td><td>Análise GPT do chamado (classificação + texto).</td></tr>
+    <tr><td><code>assistencia_finalizada</code></td><td>Finalização do chamado: responsáveis, providências, foto do reparo, NPS, status final.</td></tr>
+    <tr><td><code>assistencia_finalizada_itens</code></td><td>Materiais utilizados no reparo (item, quantidade, unidade).</td></tr>
+    <tr><td><code>materiais_reparo_pos_obra</code> / <code>materiais</code></td><td>Catálogo de materiais.</td></tr>
+    <tr><td><code>itens_utilizados_posobra</code></td><td>Histórico agregado de uso de materiais por finalização.</td></tr>
+    <tr><td><code>termos_assistencia</code></td><td>Metadados do termo PDF: paths no Storage (pré-assinado, assinado, vencido), status de envio para Sienge, tipo de finalização.</td></tr>
+    <tr><td><code>clicksign_envelopes</code></td><td>Rastreamento do envelope Clicksign: status, signing_url, signed_document_url, datas.</td></tr>
+    <tr><td><code>avaliacoes_nps</code></td><td>Pesquisa de satisfação (token único, nota, comentário).</td></tr>
+    <tr><td><code>whats_contacts</code> / <code>whats_conversations</code> / <code>whats_messages</code></td><td>Histórico de conversas WhatsApp vinculadas ao chamado.</td></tr>
+    <tr><td><code>User</code> / <code>Empresa</code> / <code>Centro_Custo</code></td><td>Cadastros internos da BP.</td></tr>
+  </tbody>
+</table>
+
+<h3>3.5 Diagrama de relações — Assistência Técnica</h3>
+<div class="mermaid">
+erDiagram
+    clientes ||--o{ AssistenciaTecnica : "abre"
+    AssistenciaTecnica ||--o| assistencia_finalizada : "finaliza"
+    AssistenciaTecnica ||--o| gpt_analises : "classifica"
+    AssistenciaTecnica ||--o{ whats_conversations : "conversa"
+    assistencia_finalizada ||--o{ assistencia_finalizada_itens : "usa materiais"
+    assistencia_finalizada ||--o| termos_assistencia : "tem termo"
+    assistencia_finalizada ||--o{ clicksign_envelopes : "envelope"
+    assistencia_finalizada ||--o| avaliacoes_nps : "NPS"
+    assistencia_finalizada ||--o{ itens_utilizados_posobra : "histórico"
+    clientes ||--o| sindicos : "vinculado a"
+    clientes }o--|| empreendimentos : "pertence a"
+    AssistenciaTecnica }o--|| User : "atendido por"
+    whats_conversations ||--o{ whats_messages : "tem"
+    whats_contacts ||--o{ whats_conversations : "iniciou"
+</div>
+<p class="meta">Obs: a tabela é literalmente <code>"Assistência Técnica"</code> (com espaço e acento). No diagrama acima foi nomeada <code>AssistenciaTecnica</code> apenas pra renderização.</p>
+
+<h3>3.6 Integrações por ponto do fluxo</h3>
+<table>
+  <thead><tr><th>Momento</th><th>Integração</th><th>O que acontece</th></tr></thead>
+  <tbody>
+    <tr><td>Cliente submete solicitação</td><td>OpenAI</td><td>Análise assíncrona (classificação de risco)</td></tr>
+    <tr><td>Cliente submete solicitação</td><td>Z-API</td><td>Notificação para grupo técnico no WhatsApp</td></tr>
+    <tr><td>Finalização gera termo</td><td>Clicksign</td><td>Cria envelope + signatário; recebe <code>signing_url</code></td></tr>
+    <tr><td>Termo precisa ser assinado</td><td>Z-API</td><td>Envia link de assinatura ao cliente</td></tr>
+    <tr><td>Cliente assina</td><td>Clicksign (webhook <code>document_closed</code>)</td><td>Sistema baixa PDF assinado</td></tr>
+    <tr><td>PDF assinado pronto</td><td>Sienge</td><td>Anexa PDF no contrato/unidade do cliente</td></tr>
+    <tr><td>Após assinatura</td><td>Z-API</td><td>Envia link de NPS ao cliente</td></tr>
+    <tr><td>7 dias sem assinar</td><td>Clicksign (webhook <code>deadline</code>)</td><td>Aceitação tácita; PDF "vencido" segue para Sienge</td></tr>
+  </tbody>
+</table>
+
+<h3>3.7 Storage</h3>
+<table>
+  <thead><tr><th>Bucket</th><th>Conteúdo</th></tr></thead>
+  <tbody>
+    <tr><td><code>make-a8708d5d-termos-assistencia</code></td><td>PDFs do termo (pré-assinado, assinado, vencido). Estrutura: <code>finalizacao-{id}/...</code></td></tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h2>4. Módulo: Entrega de Chaves (Gran Santorini)</h2>
+
+<h3>4.1 Propósito</h3>
+<p>Orquestrar todo o ciclo de entrega de uma unidade nova ao cliente. Dividido em <strong>três submódulos sequenciais</strong>:</p>
+<ol>
+  <li><strong>Triagem de Pendências</strong> — antes de poder agendar, o cliente precisa estar OK com Contratos (AGEHAB) e Financeiro (Pró-Soluto + Juros Obra). Equipes internas marcam o status linha a linha.</li>
+  <li><strong>Agendamento Público</strong> — cliente entra em <code>/agendar</code>, valida CPF, escolhe um dia/período, recebe ticket com QR Code via WhatsApp.</li>
+  <li><strong>Recebimento Presencial</strong> — no dia, operador BP usa tablet para escanear QR, conferir documentos, conduzir vistoria item a item, finalizar com parecer e capturar assinatura digital.</li>
+</ol>
+<p>Notificações automáticas via ManyChat avisam clientes com pendências em aberto, todos os dias úteis.</p>
+
+<h3>4.2 Atores</h3>
+<table>
+  <thead><tr><th>Ator</th><th>Função</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Equipe Contratos</strong></td><td>Marca status AGEHAB (OK / Pendência) por cliente. Carimba <code>verificado_agehab_em</code>.</td></tr>
+    <tr><td><strong>Equipe Financeiro</strong></td><td>Marca status Pró-Soluto e Juros Obra (OK / Pendência). Carimba <code>verificado_financeiro_em</code>.</td></tr>
+    <tr><td><strong>Cliente final</strong></td><td>Tela pública, sem login, usa CPF. Recebe ticket no WhatsApp. No dia, comparece e assina.</td></tr>
+    <tr><td><strong>Engenheiro / Operador BP</strong></td><td>Conduz a vistoria com tablet: escaneia QR, valida docs, marca itens (apto / não apto), finaliza vistoria.</td></tr>
+  </tbody>
+</table>
+
+<h3>4.3 Fluxo narrativo — Submódulo 1: Triagem de Pendências</h3>
+<blockquote>
+<p>A equipe Contratos abre o painel admin (Eon Connect → Entregas → Pendências). A tabela lista todos os clientes da <code>clientes_entrega_santorini</code>. Cada linha tem três pendências: AGEHAB, Pró-Soluto, Juros Obra.</p>
+<p>Cada pendência tem <strong>três estados</strong>: cinza (não verificado), verde (verificado, sem pendência) ou laranja (verificado, com pendência). Quando o operador clica em qualquer botão, o backend grava o estado e carimba o timestamp <code>verificado_*_em</code> do setor.</p>
+<p>Toda manhã útil, às 10:00 (horário de Brasília), o <strong>pg_cron</strong> dispara a Edge Function <code>manychat-notificacoes-pendencias</code>. A função consulta a RPC <code>manychat_eligible_clients</code> (cadência de 10 dias por cliente), separa por campanha (Documental/AGEHAB ou Financeiro) e dispara via API do <strong>ManyChat</strong> o template correto. Cada disparo é registrado em <code>notificacoes_manychat_log</code> com <code>batch_id</code> único por execução.</p>
+</blockquote>
+
+<h3>4.4 Fluxo narrativo — Submódulo 2: Agendamento Público</h3>
+<blockquote>
+<p>O cliente acessa <code>/agendar</code> (rota pública, sem login). Digita o CPF no validador (componente <code>CpfValidator</code> reaproveitado do módulo de Assistência — slots de dígitos, validação mod-11, feedback animado).</p>
+<p>O backend (<code>POST /entregas/validar-cpf</code>) busca o CPF em <code>clientes_entrega_santorini</code>. Se o cliente tem alguma pendência ativa, retorna a tela de bloqueio listando o que falta resolver. Senão, libera o calendário.</p>
+<p>O calendário (<code>GET /entregas/disponibilidade</code>) carrega os próximos 90 dias. Cada dia mostra vagas disponíveis em verde, lotados em cinza, e atualiza em <strong>tempo real via Supabase Realtime</strong> quando outro cliente reserva. O cliente escolhe um dia, vê os horários disponíveis e clica em um slot livre.</p>
+<p>A reserva (<code>POST /entregas/reservar</code>) faz um UPDATE atômico em <code>entrega_slot</code> (com <code>WHERE reserva_cliente_id IS NULL</code> — serializa concorrência sem locks). Se OK, o cliente confirma (<code>POST /entregas/confirmar</code>), o sistema gera um <code>checkin_token</code> UUID único e envia via <strong>Z-API</strong> uma imagem com QR Code para o WhatsApp do cliente.</p>
+</blockquote>
+
+<h3>4.5 Fluxo narrativo — Submódulo 3: Recebimento Presencial</h3>
+<blockquote>
+<p>No dia da entrega, o operador BP abre o app de Recebimento no tablet. O cliente apresenta o QR Code (via WhatsApp ou ticket). A câmera do tablet escaneia o QR, extrai o <code>checkin_token</code> e chama <code>GET /entregas/checkin/:token</code>. O backend marca <code>token_usado_checkin_em</code> e retorna os dados do cliente, slot e vistoria.</p>
+<p><strong>Etapa 1 — Documentos:</strong> operador faz upload da identidade do cliente (obrigatório) e, se aplicável, procuração e documento do proprietário. Os arquivos vão para o Storage <code>entrega-recebimento</code>. A vistoria avança de <code>aguardando_docs</code> → <code>docs_validados</code>.</p>
+<p><strong>Etapa 2 — Checklist item a item:</strong> o sistema carregou um snapshot do catálogo <code>vistoria_item_template</code> para a <code>vistoria_entrega_item</code>. Para cada item (ex: "Estado das paredes do quarto", "Funcionamento da fechadura"), o operador tira foto (obrigatória), marca aceito ou não, e adiciona observação.</p>
+<p><strong>Etapa 3 — Parecer e assinatura:</strong> após todos os itens validados, o operador clica "Finalizar Vistoria" e escolhe parecer: <code>apto</code> (cliente aceita as chaves) ou <code>nao_apto</code> (cliente rejeita; é reagendado). Se apto, o cliente escaneia o <strong>mesmo QR</strong> para iniciar a assinatura. A integração com <strong>Clicksign</strong> para coletar a assinatura digital do termo de recebimento ainda está em backlog — hoje, o sistema apenas marca <code>termo_assinado_em</code> e queima o token.</p>
+</blockquote>
+
+<h3>4.6 Modelo de dados — tabelas core</h3>
+<table>
+  <thead><tr><th>Tabela</th><th>Função</th></tr></thead>
+  <tbody>
+    <tr><td><code>clientes_entrega_santorini</code></td><td>Núcleo do módulo. Cliente da entrega (separado de <code>clientes</code> da Assistência). Contém pendências (<code>pendencia_agehab</code>, <code>pendencia_prosoluto</code>, <code>pendencia_jurosobra</code>) e timestamps de verificação por setor (<code>verificado_agehab_em</code>, <code>verificado_financeiro_em</code>). Também guarda <code>id_manychat</code> (subscriber populado via n8n) e <code>agendado_em</code>.</td></tr>
+    <tr><td><code>entrega_periodo_config</code></td><td>Configuração dos horários disponíveis por empreendimento e tipo de dia (semana / sábado / domingo).</td></tr>
+    <tr><td><code>entrega_slot</code></td><td>Slot individual (uma vaga). Ao ser reservado recebe <code>reserva_cliente_id</code> e gera <code>checkin_token</code>. UPDATE atômico no <code>reserva_cliente_id IS NULL</code> resolve concorrência.</td></tr>
+    <tr><td><code>vistoria_entrega</code></td><td>Vistoria do cliente no dia. Máquina de estados: <code>aguardando_docs</code> → <code>docs_validados</code> → <code>vistoria_em_andamento</code> → <code>finalizada_apto</code>/<code>finalizada_nao_apto</code> → <code>termo_assinado</code>. Guarda paths dos documentos, parecer, engenheiro, timestamps.</td></tr>
+    <tr><td><code>vistoria_entrega_item</code></td><td>Item da vistoria (snapshot). Aceito (sim/não), observação, foto.</td></tr>
+    <tr><td><code>vistoria_item_template</code></td><td>Catálogo de itens do checklist (por empreendimento). Snapshot é copiado para <code>vistoria_entrega_item</code> quando a vistoria é criada.</td></tr>
+    <tr><td><code>notificacoes_manychat_log</code></td><td>Histórico de notificações ManyChat. Agrupado por <code>batch_id</code>. Status <code>success</code>/<code>failed</code>, com a resposta da API.</td></tr>
+  </tbody>
+</table>
+
+<h3>4.7 Diagrama de relações — Entrega de Chaves</h3>
+<div class="mermaid">
+erDiagram
+    clientes_entrega_santorini ||--o{ entrega_slot : "reserva"
+    clientes_entrega_santorini ||--o{ notificacoes_manychat_log : "notificada em"
+    clientes_entrega_santorini ||--o{ vistoria_entrega : "vistoria"
+    entrega_slot ||--o| vistoria_entrega : "no slot"
+    vistoria_entrega ||--o{ vistoria_entrega_item : "checklist"
+    vistoria_item_template ||--o{ vistoria_entrega_item : "snapshot"
+    vistoria_entrega }o--|| User : "engenheiro"
+    entrega_periodo_config ||..o{ entrega_slot : "gera"
+</div>
+
+<h3>4.8 Integrações por ponto do fluxo</h3>
+<table>
+  <thead><tr><th>Momento</th><th>Integração</th><th>O que acontece</th></tr></thead>
+  <tbody>
+    <tr><td>Diariamente seg–sex 10:00 BRT</td><td>pg_cron + ManyChat</td><td>Dispara notificações para clientes com pendência ativa, respeitando cadência de 10 dias</td></tr>
+    <tr><td>Subscriber ID</td><td>n8n</td><td>Popula <code>id_manychat</code> em <code>clientes_entrega_santorini</code></td></tr>
+    <tr><td>Cliente confirma agendamento</td><td>Z-API</td><td>Envia QR Code + link via WhatsApp</td></tr>
+    <tr><td>Calendário em tela pública</td><td>Supabase Realtime</td><td>Atualiza vagas em tempo real</td></tr>
+    <tr><td>Cliente assina termo</td><td>Clicksign</td><td><strong>Em backlog</strong> — fluxo de envelope + webhook ainda não em produção</td></tr>
+  </tbody>
+</table>
+
+<h3>4.9 Storage</h3>
+<table>
+  <thead><tr><th>Bucket</th><th>Conteúdo</th></tr></thead>
+  <tbody>
+    <tr><td><code>entrega-recebimento</code></td><td>Documentos da vistoria (<code>{vistoria_id}/docs/...</code>) e fotos dos itens (<code>{vistoria_id}/itens/...</code>)</td></tr>
+  </tbody>
+</table>
+
+<h3>4.10 Automação agendada (pg_cron)</h3>
+<table>
+  <thead><tr><th>Job</th><th>Schedule</th><th>Função</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>manychat-pendencias-notificacoes</code></td>
+      <td><code>0 13 * * 1-5</code><br>(13:00 UTC = 10:00 BRT, seg–sex)</td>
+      <td>Chama Edge Function <code>manychat-notificacoes-pendencias</code> via <code>pg_net.http_post</code>. Primeiro disparo real: 30/04/2026.</td>
+    </tr>
+  </tbody>
+</table>
+<p>A Edge Function consulta a RPC <code>manychat_eligible_clients(cadencia_dias=10, batch_limit=100)</code> para selecionar candidatos. Regra de cadência: cliente só recebe se a última notificação bem-sucedida foi há mais de 10 dias (ou nunca recebeu).</p>
+
+<hr>
+
+<h2>5. Anexo — Mapa rápido de endpoints</h2>
+
+<h3>Assistência Técnica</h3>
+<table>
+  <thead><tr><th>Endpoint</th><th>Função</th></tr></thead>
+  <tbody>
+    <tr><td><code>POST /solicitacao-assistencia-v2</code></td><td>Criar solicitação</td></tr>
+    <tr><td><code>GET /assistencia</code> / <code>GET /assistencia/:id</code></td><td>Listar / detalhar</td></tr>
+    <tr><td><code>PATCH /assistencia/:id/status</code></td><td>Atualizar status</td></tr>
+    <tr><td><code>PATCH /assistencia/:id/data</code></td><td>Agendar vistoria/reparo</td></tr>
+    <tr><td><code>POST /assistencia-finalizada/:id</code></td><td>Criar finalização</td></tr>
+    <tr><td><code>GET /assistencia-finalizada/:id/termo-pdf</code></td><td>Gerar PDF do termo</td></tr>
+    <tr><td><code>POST /assistencia-finalizada/:id/enviar-sienge</code></td><td>Anexar no Sienge</td></tr>
+    <tr><td><code>GET /termos-assistencia</code></td><td>Listar termos</td></tr>
+  </tbody>
+</table>
+
+<h3>Clicksign (Edge Function dedicada)</h3>
+<table>
+  <thead><tr><th>Endpoint</th><th>Função</th></tr></thead>
+  <tbody>
+    <tr><td><code>POST /clicksign/send-envelope</code></td><td>Cria envelope + envia link via Z-API</td></tr>
+    <tr><td><code>POST /clicksign/webhook</code></td><td>Recebe eventos <code>document_closed</code> / <code>deadline</code> / etc</td></tr>
+    <tr><td><code>POST /clicksign/resend</code></td><td>Reenvia link de assinatura</td></tr>
+  </tbody>
+</table>
+
+<h3>Entrega de Chaves</h3>
+<table>
+  <thead><tr><th>Endpoint</th><th>Função</th></tr></thead>
+  <tbody>
+    <tr><td><code>POST /entregas/validar-cpf</code></td><td>Valida CPF + gate de pendências</td></tr>
+    <tr><td><code>GET /entregas/disponibilidade</code></td><td>Calendário com vagas</td></tr>
+    <tr><td><code>POST /entregas/reservar</code></td><td>UPDATE atômico em entrega_slot</td></tr>
+    <tr><td><code>POST /entregas/confirmar</code></td><td>Gera <code>checkin_token</code> + envia QR via Z-API</td></tr>
+    <tr><td><code>POST /entregas/cancelar</code> / <code>/remarcar</code></td><td>Operações de gestão da reserva</td></tr>
+    <tr><td><code>GET /entregas/checkin/:token</code></td><td>Lê QR e marca check-in</td></tr>
+    <tr><td><code>POST /entregas/vistoria/criar</code></td><td>Cria vistoria com snapshot dos itens</td></tr>
+    <tr><td><code>POST /entregas/vistoria/:id/upload-doc</code></td><td>Upload identidade/procuração</td></tr>
+    <tr><td><code>POST /entregas/vistoria/:id/iniciar</code></td><td>Transição → vistoria_em_andamento</td></tr>
+    <tr><td><code>POST /entregas/vistoria/:id/item</code></td><td>Salva foto + aceito/observação por item</td></tr>
+    <tr><td><code>POST /entregas/vistoria/:id/finalizar</code></td><td>Parecer apto/não apto</td></tr>
+    <tr><td><code>GET /entregas/assinar/:token</code></td><td>Inicia fluxo de assinatura (em backlog)</td></tr>
+    <tr><td><code>POST /entregas/pendencias/toggle</code></td><td>Marca pendência + carimba <code>verificado_em</code></td></tr>
+  </tbody>
+</table>
+
+<p style="margin-top:48px; padding-top:16px; border-top:1px solid var(--border); color:var(--muted); font-size:12px; text-align:center;">
+Documento gerado para a reunião com a equipe OctaBuild — Eon Connect / BP Incorporadora — Abril/2026
+</p>
+
+</main>
+</body>
+</html>
