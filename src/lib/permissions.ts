@@ -28,7 +28,12 @@ export type UserPermissions = {
       view?: boolean;
       pendencias?:
         | boolean
-        | { view?: boolean; contratos?: boolean; financeiro?: boolean };
+        | {
+            view?: boolean;
+            agehab?: boolean;
+            financeiro?: boolean;
+            contratos?: boolean;
+          };
       agendamentos?: boolean;
       recebimento?: boolean;
     };
@@ -129,8 +134,9 @@ export const PERMISSION_TREE: PermissionTreeNode[] = [
             key: 'pendencias',
             label: 'Pendências',
             children: [
-              { key: 'contratos', label: 'Contratos (AGEHAB)' },
+              { key: 'agehab', label: 'AGEHAB' },
               { key: 'financeiro', label: 'Financeiro (Pró-Soluto + Juros Obra)' },
+              { key: 'contratos', label: 'Contratos (RERAS + Rescisão de Contrato)' },
             ],
           },
           { key: 'agendamentos', label: 'Agendamentos' },

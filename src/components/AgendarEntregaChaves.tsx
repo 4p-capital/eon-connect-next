@@ -46,6 +46,8 @@ type Pendencias = {
   agehab: boolean;
   pro_soluto: boolean;
   juros_obra: boolean;
+  reras: boolean;
+  rescisao_contrato: boolean;
 };
 
 type ReservaAtiva = {
@@ -415,40 +417,22 @@ export function AgendarEntregaChaves() {
               </div>
               <div>
                 <h2 className="text-base font-semibold text-[var(--foreground)]">
-                  Pendências identificadas
+                  Não foi possível agendar
                 </h2>
-                <p className="text-sm text-[var(--muted-foreground)]">
-                  Para agendar a entrega das chaves, você precisa primeiro
-                  resolver os itens abaixo com a equipe BP.
+                <p className="text-sm text-[var(--muted-foreground)] mt-1">
+                  Não foi possível agendar seu recebimento das chaves. Fale com nosso atendimento clicando no botão abaixo.
                 </p>
               </div>
             </div>
 
-            <ul className="space-y-2 mb-5">
-              {pendencias.agehab && (
-                <li className="flex items-center gap-2 text-sm text-[var(--foreground)] p-3 bg-amber-50 rounded-xl">
-                  <span className="w-2 h-2 rounded-full bg-amber-600" />
-                  Pendência junto à <strong>AGEHAB</strong>
-                </li>
-              )}
-              {pendencias.pro_soluto && (
-                <li className="flex items-center gap-2 text-sm text-[var(--foreground)] p-3 bg-amber-50 rounded-xl">
-                  <span className="w-2 h-2 rounded-full bg-amber-600" />
-                  Pendência de <strong>Pró-Soluto</strong>
-                </li>
-              )}
-              {pendencias.juros_obra && (
-                <li className="flex items-center gap-2 text-sm text-[var(--foreground)] p-3 bg-amber-50 rounded-xl">
-                  <span className="w-2 h-2 rounded-full bg-amber-600" />
-                  Pendência de <strong>Juros de Obra</strong>
-                </li>
-              )}
-            </ul>
-
-            <p className="text-xs text-[var(--muted-foreground)] mb-4">
-              Assim que essas pendências forem resolvidas, você poderá retornar
-              aqui e fazer o agendamento.
-            </p>
+            <a
+              href="https://wa.me/556135506717?text=Estou%20com%20problemas%20para%20agendar%20o%20recebimento%20das%20chaves."
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium transition-all flex items-center justify-center gap-2 mb-3"
+            >
+              Falar com atendimento
+            </a>
 
             <button
               onClick={handleVoltarInicio}

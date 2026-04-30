@@ -75,7 +75,7 @@ entregasRoutes.post("/entregas/validar-cpf", async (c) => {
     const { data: clientes, error } = await supabase
       .from("clientes_entrega_santorini")
       .select(
-        "id, cliente, cpf_cnpj, bloco, unidade, telefone, email, pendencia_agehab, pendencia_prosoluto, pendencia_jurosobra, agendado_em",
+        "id, cliente, cpf_cnpj, bloco, unidade, telefone, email, pendencia_agehab, pendencia_prosoluto, pendencia_jurosobra, pendencia_reras, pendencia_rescisao_contrato, agendado_em",
       );
 
     if (error) throw error;
@@ -99,10 +99,17 @@ entregasRoutes.post("/entregas/validar-cpf", async (c) => {
       agehab: cliente.pendencia_agehab === true,
       pro_soluto: cliente.pendencia_prosoluto === true,
       juros_obra: cliente.pendencia_jurosobra === true,
+      reras: cliente.pendencia_reras === true,
+      rescisao_contrato: cliente.pendencia_rescisao_contrato === true,
     };
 
+    // Gate de agendamento: bloqueia se qualquer pendência estiver ativa.
     const temPendencia =
-      pendencias.agehab || pendencias.pro_soluto || pendencias.juros_obra;
+      pendencias.agehab ||
+      pendencias.pro_soluto ||
+      pendencias.juros_obra ||
+      pendencias.reras ||
+      pendencias.rescisao_contrato;
 
     const { data: reservaAtiva } = await supabase
       .from("entrega_slot")
@@ -235,7 +242,7 @@ entregasRoutes.post("/entregas/reservar", async (c) => {
     const { data: clientes, error: errCli } = await supabase
       .from("clientes_entrega_santorini")
       .select(
-        "id, cliente, bloco, unidade, telefone, pendencia_agehab, pendencia_prosoluto, pendencia_jurosobra, cpf_cnpj",
+        "id, cliente, bloco, unidade, telefone, pendencia_agehab, pendencia_prosoluto, pendencia_jurosobra, pendencia_reras, pendencia_rescisao_contrato, cpf_cnpj",
       );
     if (errCli) throw errCli;
 
@@ -250,10 +257,13 @@ entregasRoutes.post("/entregas/reservar", async (c) => {
       );
     }
 
+    // Gate de reserva: bloqueia se qualquer pendência estiver ativa.
     if (
       cliente.pendencia_agehab ||
       cliente.pendencia_prosoluto ||
-      cliente.pendencia_jurosobra
+      cliente.pendencia_jurosobra ||
+      cliente.pendencia_reras ||
+      cliente.pendencia_rescisao_contrato
     ) {
       return c.json(
         {
@@ -610,7 +620,8 @@ entregasRoutes.get("/entregas/checkin/:token", async (c) => {
          token_usado_checkin_em, token_usado_assinatura_em,
          clientes_entrega_santorini!entrega_slot_reserva_cliente_id_fkey (
            id, cliente, bloco, unidade, cpf_cnpj, telefone, email, reserva,
-           pendencia_agehab, pendencia_prosoluto, pendencia_jurosobra
+           pendencia_agehab, pendencia_prosoluto, pendencia_jurosobra,
+           pendencia_reras, pendencia_rescisao_contrato
          )`,
       )
       .eq("checkin_token", token)
@@ -659,6 +670,8 @@ entregasRoutes.get("/entregas/checkin/:token", async (c) => {
           agehab: cli?.pendencia_agehab === true,
           pro_soluto: cli?.pendencia_prosoluto === true,
           juros_obra: cli?.pendencia_jurosobra === true,
+          reras: cli?.pendencia_reras === true,
+          rescisao_contrato: cli?.pendencia_rescisao_contrato === true,
         },
       },
       vistoria: vistoria ?? null,
@@ -1456,23 +1469,43 @@ entregasRoutes.get("/entregas/catalogo-itens", async (c) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// Toggle de pendências por setor
+// Toggle de pendências por setor (3 setores)
 // Mapeamento campo → setor:
-//   pendencia_agehab     → Contratos
-//   pendencia_prosoluto  → Financeiro
-//   pendencia_jurosobra  → Financeiro
+//   pendencia_agehab              → AGEHAB     (verificado_agehab_em)
+//   pendencia_prosoluto           → Financeiro (verificado_financeiro_em)
+//   pendencia_jurosobra           → Financeiro (verificado_financeiro_em)
+//   pendencia_reras               → Contratos  (verificado_contratos_em)
+//   pendencia_rescisao_contrato   → Contratos  (verificado_contratos_em)
 // Valida permissão a partir de User.permissions (auth_user_id).
 // ═══════════════════════════════════════════════════════════════════
 
-type PendenciaCampo = "pendencia_agehab" | "pendencia_prosoluto" | "pendencia_jurosobra";
+type Setor = "agehab" | "financeiro" | "contratos";
 
-const CAMPO_SETOR: Record<PendenciaCampo, "contratos" | "financeiro"> = {
-  pendencia_agehab: "contratos",
+type PendenciaCampo =
+  | "pendencia_agehab"
+  | "pendencia_prosoluto"
+  | "pendencia_jurosobra"
+  | "pendencia_reras"
+  | "pendencia_rescisao_contrato";
+
+const CAMPO_SETOR: Record<PendenciaCampo, Setor> = {
+  pendencia_agehab: "agehab",
   pendencia_prosoluto: "financeiro",
   pendencia_jurosobra: "financeiro",
+  pendencia_reras: "contratos",
+  pendencia_rescisao_contrato: "contratos",
 };
 
-function podePendencia(permissions: any, setor: "contratos" | "financeiro"): boolean {
+const SETOR_VERIFICADO_FIELD: Record<
+  Setor,
+  "verificado_agehab_em" | "verificado_financeiro_em" | "verificado_contratos_em"
+> = {
+  agehab: "verificado_agehab_em",
+  financeiro: "verificado_financeiro_em",
+  contratos: "verificado_contratos_em",
+};
+
+function podePendencia(permissions: any, setor: Setor): boolean {
   const p = permissions?.entregas?.santorini?.pendencias;
   if (p === true) return false; // Formato legado (boolean) não distingue setor
   if (p && typeof p === "object" && p[setor] === true) return true;
@@ -1521,9 +1554,8 @@ entregasRoutes.post("/entregas/pendencias/toggle", async (c) => {
     }
 
     // Qualquer ação (OK ou Pendência) conta como "verificação" pelo setor dono do campo.
-    // Contratos → carimba verificado_agehab_em; Financeiro → carimba verificado_financeiro_em.
-    const verificadoField =
-      setor === "contratos" ? "verificado_agehab_em" : "verificado_financeiro_em";
+    // AGEHAB → verificado_agehab_em; Financeiro → verificado_financeiro_em; Contratos → verificado_contratos_em.
+    const verificadoField = SETOR_VERIFICADO_FIELD[setor];
     const agoraISO = new Date().toISOString();
 
     const { data: atualizado, error: errUp } = await supabase
