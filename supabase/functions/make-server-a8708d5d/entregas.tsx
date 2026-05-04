@@ -1886,3 +1886,125 @@ entregasRoutes.get("/entregas/pendencias/eficiencia", async (c) => {
     return c.json({ error: String(err) }, 500);
   }
 });
+
+// ═══════════════════════════════════════════════════════════════════
+// ⚙️  CONFIG DE DISPAROS DE PENDÊNCIAS
+// GET: leitura aberta a quem tiver permissão de eficiência.
+// PATCH: requer permissão `entregas.santorini.eficiencia` (gestores).
+// ═══════════════════════════════════════════════════════════════════
+
+function podeEficiencia(permissions: any): boolean {
+  const p = permissions?.entregas?.santorini?.eficiencia;
+  return p === true || (p && typeof p === "object" && p.view === true);
+}
+
+async function configEnriquecida(supabase: any) {
+  const { data: cfg } = await supabase
+    .from("pendencias_disparo_config")
+    .select("*")
+    .eq("id", 1)
+    .maybeSingle();
+
+  // Conta disparos de hoje no log (para a tela mostrar uso vs cota).
+  const hojeStart = new Date();
+  hojeStart.setHours(0, 0, 0, 0);
+  const { data: logsHoje } = await supabase
+    .from("notificacoes_manychat_log")
+    .select("campanha, status")
+    .gte("enviado_em", hojeStart.toISOString());
+
+  const disparosHoje: Record<string, { total: number; success: number; failed: number }> = {
+    agehab: { total: 0, success: 0, failed: 0 },
+    financeiro: { total: 0, success: 0, failed: 0 },
+    contratos: { total: 0, success: 0, failed: 0 },
+  };
+  for (const r of logsHoje || []) {
+    const camp = (r as any).campanha as string;
+    if (camp in disparosHoje) {
+      disparosHoje[camp].total += 1;
+      if ((r as any).status === "success") disparosHoje[camp].success += 1;
+      else disparosHoje[camp].failed += 1;
+    }
+  }
+
+  return { cfg, disparosHoje };
+}
+
+entregasRoutes.get("/entregas/pendencias/disparo-config", async (c) => {
+  try {
+    const supabase = getSupabase();
+    const { cfg, disparosHoje } = await configEnriquecida(supabase);
+    return c.json({ cfg, disparosHoje, timestamp: new Date().toISOString() });
+  } catch (err) {
+    console.error("❌ GET /disparo-config:", err);
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
+entregasRoutes.patch("/entregas/pendencias/disparo-config", async (c) => {
+  try {
+    const body = await c.req.json();
+    const authUserId = String(body?.auth_user_id ?? "");
+    if (!authUserId) {
+      return c.json({ ok: false, error: "auth_user_id obrigatório" }, 400);
+    }
+
+    const supabase = getSupabase();
+    const { data: user } = await supabase
+      .from("User")
+      .select("id, nome, permissions")
+      .eq("auth_user_id", authUserId)
+      .maybeSingle();
+
+    if (!user || !podeEficiencia((user as any).permissions)) {
+      return c.json(
+        { ok: false, error: "Sem permissão para alterar configuração de disparos.", code: "SEM_PERMISSAO" },
+        403,
+      );
+    }
+
+    // Whitelist de campos editáveis.
+    const patch: Record<string, unknown> = {};
+    const numFields = [
+      "cota_agehab_dia",
+      "cota_financeiro_dia",
+      "cota_contratos_dia",
+      "cadencia_dias",
+      "slots_por_dia",
+    ] as const;
+    const boolFields = [
+      "pausado_global",
+      "pausado_agehab",
+      "pausado_financeiro",
+      "pausado_contratos",
+    ] as const;
+    for (const f of numFields) {
+      if (typeof body?.[f] === "number" && Number.isFinite(body[f]) && body[f] >= 0) {
+        patch[f] = Math.floor(body[f]);
+      }
+    }
+    for (const f of boolFields) {
+      if (typeof body?.[f] === "boolean") patch[f] = body[f];
+    }
+
+    if (Object.keys(patch).length === 0) {
+      return c.json({ ok: false, error: "Nenhum campo válido informado" }, 400);
+    }
+
+    patch.updated_at = new Date().toISOString();
+    patch.updated_by = (user as any).nome?.trim() || authUserId;
+
+    const { data: updated, error } = await supabase
+      .from("pendencias_disparo_config")
+      .update(patch)
+      .eq("id", 1)
+      .select("*")
+      .maybeSingle();
+    if (error) throw error;
+
+    return c.json({ ok: true, cfg: updated, alterado_por: (user as any).nome?.trim() || null });
+  } catch (err) {
+    console.error("❌ PATCH /disparo-config:", err);
+    return c.json({ ok: false, error: String(err) }, 500);
+  }
+});
