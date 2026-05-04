@@ -142,7 +142,7 @@ export const PERMISSION_TREE: PermissionTreeNode[] = [
           },
           { key: 'agendamentos', label: 'Agendamentos' },
           { key: 'recebimento', label: 'Recebimento / Vistoria' },
-          { key: 'eficiencia', label: 'Eficiência da campanha (gestão)' },
+          { key: 'eficiencia', label: 'Acompanhamento (gestão da campanha)' },
         ],
       },
     ],
