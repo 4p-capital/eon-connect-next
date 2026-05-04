@@ -14,11 +14,13 @@ import {
   FileText,
   Wallet,
   ShieldCheck,
+  TrendingDown,
 } from "lucide-react";
 import { usePermissionGuard } from "@/hooks/usePermissionGuard";
 import { useUser } from "@/contexts/UserContext";
 import { getSupabaseClient } from "@/utils/supabase/client";
 import { publicAnonKey, apiBaseUrl } from "@/utils/supabase/info";
+import { EntregasSantoriniEficiencia } from "./EntregasSantoriniEficiencia";
 
 const API_BASE = `${apiBaseUrl}`;
 const AUTH_HEADER = { Authorization: `Bearer ${publicAnonKey}` };
@@ -37,7 +39,6 @@ interface Cliente {
   pendencia_prosoluto: boolean;
   pendencia_jurosobra: boolean;
   pendencia_reras: boolean;
-  pendencia_rescisao_contrato: boolean;
   verificado_agehab_em: string | null;
   verificado_financeiro_em: string | null;
   verificado_contratos_em: string | null;
@@ -47,8 +48,7 @@ type PendenciaField =
   | "pendencia_agehab"
   | "pendencia_prosoluto"
   | "pendencia_jurosobra"
-  | "pendencia_reras"
-  | "pendencia_rescisao_contrato";
+  | "pendencia_reras";
 
 type Setor = "agehab" | "financeiro" | "contratos";
 type TriState = "nao_verificado" | "ok" | "pendente";
@@ -64,7 +64,6 @@ const PENDENCIA_LABELS: Record<PendenciaField, string> = {
   pendencia_prosoluto: "Pró-Soluto",
   pendencia_jurosobra: "Juros Obra",
   pendencia_reras: "RERAS",
-  pendencia_rescisao_contrato: "Rescisão Contrato",
 };
 
 const CAMPO_SETOR: Record<PendenciaField, Setor> = {
@@ -72,7 +71,6 @@ const CAMPO_SETOR: Record<PendenciaField, Setor> = {
   pendencia_prosoluto: "financeiro",
   pendencia_jurosobra: "financeiro",
   pendencia_reras: "contratos",
-  pendencia_rescisao_contrato: "contratos",
 };
 
 const SETOR_LABEL: Record<Setor, string> = {
@@ -84,7 +82,7 @@ const SETOR_LABEL: Record<Setor, string> = {
 const PENDENCIAS_POR_SETOR: Record<Setor, PendenciaField[]> = {
   agehab: ["pendencia_agehab"],
   financeiro: ["pendencia_prosoluto", "pendencia_jurosobra"],
-  contratos: ["pendencia_reras", "pendencia_rescisao_contrato"],
+  contratos: ["pendencia_reras"],
 };
 
 const SETOR_VERIFICADO_FIELD: Record<
@@ -164,7 +162,6 @@ export function EntregasSantoriniPendencias() {
       pendencia_prosoluto: canBySetor.financeiro,
       pendencia_jurosobra: canBySetor.financeiro,
       pendencia_reras: canBySetor.contratos,
-      pendencia_rescisao_contrato: canBySetor.contratos,
     }),
     [canBySetor],
   );
@@ -175,6 +172,7 @@ export function EntregasSantoriniPendencias() {
   const [filtro, setFiltro] = useState<FiltroKey>("todos");
   const [updatingCell, setUpdatingCell] = useState<string | null>(null);
   const [alertaAcesso, setAlertaAcesso] = useState<string | null>(null);
+  const [aba, setAba] = useState<"pendencias" | "eficiencia">("pendencias");
 
   useEffect(() => {
     if (!hasPermission) return;
@@ -185,7 +183,7 @@ export function EntregasSantoriniPendencias() {
         const { data, error } = await (supabase
           .from("clientes_entrega_santorini") as ReturnType<typeof supabase.from>)
           .select(
-            "id, reserva, data_venda, bloco, unidade, cliente, cpf_cnpj, email, telefone, pendencia_agehab, pendencia_prosoluto, pendencia_jurosobra, pendencia_reras, pendencia_rescisao_contrato, verificado_agehab_em, verificado_financeiro_em, verificado_contratos_em",
+            "id, reserva, data_venda, bloco, unidade, cliente, cpf_cnpj, email, telefone, pendencia_agehab, pendencia_prosoluto, pendencia_jurosobra, pendencia_reras, verificado_agehab_em, verificado_financeiro_em, verificado_contratos_em",
           )
           .order("bloco", { ascending: true })
           .order("unidade", { ascending: true });
@@ -293,8 +291,7 @@ export function EntregasSantoriniPendencias() {
           c.pendencia_agehab ||
           c.pendencia_prosoluto ||
           c.pendencia_jurosobra ||
-          c.pendencia_reras ||
-          c.pendencia_rescisao_contrato,
+          c.pendencia_reras,
       );
     }
 
@@ -311,9 +308,7 @@ export function EntregasSantoriniPendencias() {
         (c) => c.pendencia_prosoluto || c.pendencia_jurosobra,
       ).length,
       contratosNaoVerif: clientes.filter((c) => !c.verificado_contratos_em).length,
-      contratosPendente: clientes.filter(
-        (c) => c.pendencia_reras || c.pendencia_rescisao_contrato,
-      ).length,
+      contratosPendente: clientes.filter((c) => c.pendencia_reras).length,
     }),
     [clientes],
   );
@@ -354,6 +349,36 @@ export function EntregasSantoriniPendencias() {
           {!loading && (
             <EscopoAviso canBySetor={canBySetor} somenteLeitura={somenteLeitura} />
           )}
+
+          {/* Tabs */}
+          <div className="mt-4 -mb-5 flex items-center gap-1 border-b border-[var(--border)]">
+            <button
+              onClick={() => setAba("pendencias")}
+              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                aba === "pendencias"
+                  ? "border-black text-black"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <ClipboardList className="w-4 h-4" />
+                Pendências
+              </span>
+            </button>
+            <button
+              onClick={() => setAba("eficiencia")}
+              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                aba === "eficiencia"
+                  ? "border-black text-black"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <TrendingDown className="w-4 h-4" />
+                Eficiência da campanha
+              </span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -367,6 +392,12 @@ export function EntregasSantoriniPendencias() {
         </div>
       )}
 
+      {aba === "eficiencia" ? (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
+          <EntregasSantoriniEficiencia />
+        </div>
+      ) : (
+        <>
       {/* Métricas — 3 setores × 2 = 6 cards */}
       {!loading && clientes.length > 0 && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4">
@@ -629,6 +660,8 @@ export function EntregasSantoriniPendencias() {
           </>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }

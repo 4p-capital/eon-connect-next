@@ -136,7 +136,7 @@ export const PERMISSION_TREE: PermissionTreeNode[] = [
             children: [
               { key: 'agehab', label: 'AGEHAB' },
               { key: 'financeiro', label: 'Financeiro (Pró-Soluto + Juros Obra)' },
-              { key: 'contratos', label: 'Contratos (RERAS + Rescisão de Contrato)' },
+              { key: 'contratos', label: 'Contratos (RERAS)' },
             ],
           },
           { key: 'agendamentos', label: 'Agendamentos' },
