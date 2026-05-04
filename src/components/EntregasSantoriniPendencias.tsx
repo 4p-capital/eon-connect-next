@@ -14,13 +14,11 @@ import {
   FileText,
   Wallet,
   ShieldCheck,
-  TrendingDown,
 } from "lucide-react";
 import { usePermissionGuard } from "@/hooks/usePermissionGuard";
 import { useUser } from "@/contexts/UserContext";
 import { getSupabaseClient } from "@/utils/supabase/client";
 import { publicAnonKey, apiBaseUrl } from "@/utils/supabase/info";
-import { EntregasSantoriniEficiencia } from "./EntregasSantoriniEficiencia";
 
 const API_BASE = `${apiBaseUrl}`;
 const AUTH_HEADER = { Authorization: `Bearer ${publicAnonKey}` };
@@ -172,7 +170,6 @@ export function EntregasSantoriniPendencias() {
   const [filtro, setFiltro] = useState<FiltroKey>("todos");
   const [updatingCell, setUpdatingCell] = useState<string | null>(null);
   const [alertaAcesso, setAlertaAcesso] = useState<string | null>(null);
-  const [aba, setAba] = useState<"pendencias" | "eficiencia">("pendencias");
 
   useEffect(() => {
     if (!hasPermission) return;
@@ -349,36 +346,6 @@ export function EntregasSantoriniPendencias() {
           {!loading && (
             <EscopoAviso canBySetor={canBySetor} somenteLeitura={somenteLeitura} />
           )}
-
-          {/* Tabs */}
-          <div className="mt-4 -mb-5 flex items-center gap-1 border-b border-[var(--border)]">
-            <button
-              onClick={() => setAba("pendencias")}
-              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
-                aba === "pendencias"
-                  ? "border-black text-black"
-                  : "border-transparent text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              <span className="inline-flex items-center gap-1.5">
-                <ClipboardList className="w-4 h-4" />
-                Pendências
-              </span>
-            </button>
-            <button
-              onClick={() => setAba("eficiencia")}
-              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
-                aba === "eficiencia"
-                  ? "border-black text-black"
-                  : "border-transparent text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              <span className="inline-flex items-center gap-1.5">
-                <TrendingDown className="w-4 h-4" />
-                Eficiência da campanha
-              </span>
-            </button>
-          </div>
         </div>
       </div>
 
@@ -392,12 +359,6 @@ export function EntregasSantoriniPendencias() {
         </div>
       )}
 
-      {aba === "eficiencia" ? (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
-          <EntregasSantoriniEficiencia />
-        </div>
-      ) : (
-        <>
       {/* Métricas — 3 setores × 2 = 6 cards */}
       {!loading && clientes.length > 0 && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4">
@@ -660,8 +621,6 @@ export function EntregasSantoriniPendencias() {
           </>
         )}
       </div>
-        </>
-      )}
     </div>
   );
 }

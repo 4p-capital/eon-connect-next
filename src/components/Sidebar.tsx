@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import {
   Wrench, Menu, X, ChevronLeft, ChevronDown, LogOut, Users,
   FolderOpen, LayoutDashboard, MessageCircle, Sparkles, UserCircle, FileText, Bell, Users2, List, BarChart3,
-  Key, Building2, ClipboardList, CalendarCheck, ScanLine,
+  Key, Building2, ClipboardList, CalendarCheck, ScanLine, TrendingDown,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useRouter, usePathname } from 'next/navigation';
@@ -150,6 +150,7 @@ export function Sidebar({ onWidthChange }: SidebarProps) {
             { id: 'entregas/santorini/pendencias', icon: ClipboardList, label: 'Pendências', permission: 'entregas.santorini.pendencias' },
             { id: 'entregas/santorini/agendamentos', icon: CalendarCheck, label: 'Agendamentos', permission: 'entregas.santorini.agendamentos' },
             { id: 'entregas/santorini/recebimento', icon: ScanLine, label: 'Recebimento', permission: 'entregas.santorini.recebimento' },
+            { id: 'entregas/santorini/eficiencia', icon: TrendingDown, label: 'Eficiência da campanha', permission: 'entregas.santorini.eficiencia' },
           ],
         },
       ],
