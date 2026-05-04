@@ -4,12 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LineChart,
   Line,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
   Legend,
+  Cell,
 } from "recharts";
 import {
   TrendingDown,
@@ -23,17 +26,37 @@ import {
   Wallet,
   FileText,
   AlertCircle,
+  Users,
+  KeyRound,
+  Building2,
 } from "lucide-react";
 import { publicAnonKey, apiBaseUrl } from "@/utils/supabase/info";
 
 type Setor = "agehab" | "financeiro" | "contratos";
+type Visao = "pendencias" | "clientes";
 
 interface EficienciaResp {
   baseline: Record<Setor, number>;
   atual: Record<Setor, number>;
   resolvidas: Record<Setor, number>;
   reabertas: Record<Setor, number>;
-  evolucaoDiaria: Array<{ data: string; agehab: number; financeiro: number; contratos: number }>;
+  clientes: { baseline: number; atual: number; liberados: number };
+  distribuicao: { baseline: Record<string, number>; atual: Record<string, number> };
+  topEmpreendimentos: Array<{
+    nome: string;
+    clientes: number;
+    agehab: number;
+    financeiro: number;
+    contratos: number;
+    total: number;
+  }>;
+  evolucaoDiaria: Array<{
+    data: string;
+    agehab: number;
+    financeiro: number;
+    contratos: number;
+    clientesPendentes: number;
+  }>;
   topResolvedores: Array<{ nome: string; total: number }>;
   periodo: { inicioISO: string; fimISO: string; snapshotInicialEm: string | null };
 }
@@ -67,6 +90,7 @@ export function EntregasSantoriniEficiencia() {
   const [dataFim, setDataFim] = useState("");
   const [filtroAtivo, setFiltroAtivo] = useState(false);
   const [setor, setSetor] = useState<"" | Setor>("");
+  const [visao, setVisao] = useState<Visao>("pendencias");
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -293,31 +317,78 @@ export function EntregasSantoriniEficiencia() {
       {/* Conteúdo */}
       {!carregando && !erro && dados && totais && (
         <>
-          {/* KPIs */}
+          {/* KPI destaque: clientes liberados */}
+          <div className="bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-700 text-white rounded-xl p-5 shadow-md">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
+              <div className="flex items-center gap-3">
+                <div className="bg-white/20 p-3 rounded-xl">
+                  <KeyRound className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-emerald-100">Clientes liberados para recebimento</p>
+                  <p className="text-3xl sm:text-4xl font-bold">{dados.clientes.liberados}</p>
+                  <p className="text-[11px] text-emerald-100 mt-0.5">desde o início da campanha</p>
+                </div>
+              </div>
+              <div className="border-l border-white/20 pl-4">
+                <p className="text-xs text-emerald-100 mb-1">Inaptos no início</p>
+                <p className="text-2xl font-semibold">{dados.clientes.baseline}</p>
+                <p className="text-[10px] text-emerald-100">de 367 totais</p>
+              </div>
+              <div className="border-l border-white/20 pl-4">
+                <p className="text-xs text-emerald-100 mb-1">Ainda pendentes hoje</p>
+                <p className="text-2xl font-semibold">{dados.clientes.atual}</p>
+                <p className="text-[10px] text-emerald-100">
+                  {dados.clientes.baseline > 0
+                    ? `${Math.round((dados.clientes.liberados / dados.clientes.baseline) * 100)}% liberados`
+                    : "—"}
+                </p>
+              </div>
+            </div>
+            {/* Barra de progresso */}
+            <div className="mt-4 h-2 bg-white/20 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-white rounded-full transition-all"
+                style={{
+                  width: `${
+                    dados.clientes.baseline > 0
+                      ? Math.min(100, (dados.clientes.liberados / dados.clientes.baseline) * 100)
+                      : 0
+                  }%`,
+                }}
+              />
+            </div>
+          </div>
+
+          {/* KPIs principais */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 border-0 text-white rounded-xl p-4">
+            <div className="bg-gradient-to-br from-blue-600 to-blue-700 border-0 text-white rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs text-emerald-100">Resolvidas no período</p>
+                <p className="text-xs text-blue-100">Resolvidas no período</p>
                 <div className="bg-white/20 p-1.5 rounded-lg">
                   <TrendingDown className="h-4 w-4 text-white" />
                 </div>
               </div>
               <p className="text-2xl sm:text-3xl font-bold">{totais.resolvidas}</p>
-              <p className="text-[10px] text-emerald-100 mt-1">
-                {totais.reabertas > 0 && `${totais.reabertas} reabertas`}
+              <p className="text-[10px] text-blue-100 mt-1">
+                pendências{totais.reabertas > 0 && ` · ${totais.reabertas} reabertas`}
               </p>
             </div>
 
             <div className="bg-white border border-gray-200 rounded-xl p-4">
               <p className="text-xs text-gray-600 mb-2">Baseline (início)</p>
               <p className="text-2xl sm:text-3xl font-bold text-gray-900">{totais.baseline}</p>
-              <p className="text-[10px] text-gray-500 mt-1">Pendências no snapshot inicial</p>
+              <p className="text-[10px] text-gray-500 mt-1">
+                pendências · {dados.clientes.baseline} clientes
+              </p>
             </div>
 
             <div className="bg-white border border-gray-200 rounded-xl p-4">
               <p className="text-xs text-gray-600 mb-2">Pendências hoje</p>
               <p className="text-2xl sm:text-3xl font-bold text-gray-900">{totais.atual}</p>
-              <p className="text-[10px] text-gray-500 mt-1">Soma dos campos true</p>
+              <p className="text-[10px] text-gray-500 mt-1">
+                pendências · {dados.clientes.atual} clientes
+              </p>
             </div>
 
             <div className="bg-white border border-gray-200 rounded-xl p-4">
@@ -329,7 +400,7 @@ export function EntregasSantoriniEficiencia() {
               >
                 {totais.reducao}%
               </p>
-              <p className="text-[10px] text-gray-500 mt-1">vs. baseline</p>
+              <p className="text-[10px] text-gray-500 mt-1">pendências vs. baseline</p>
             </div>
           </div>
 
@@ -400,8 +471,42 @@ export function EntregasSantoriniEficiencia() {
 
           {/* Gráfico de evolução */}
           <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <h3 className="text-sm font-semibold text-gray-900 mb-1">Evolução das pendências</h3>
-            <p className="text-xs text-gray-500 mb-3">Estoque diário por setor</p>
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">
+                  Evolução {visao === "pendencias" ? "das pendências" : "dos clientes pendentes"}
+                </h3>
+                <p className="text-xs text-gray-500">
+                  {visao === "pendencias"
+                    ? "Estoque diário por setor (cada campo true conta como 1)"
+                    : "Clientes com pelo menos uma pendência em aberto"}
+                </p>
+              </div>
+              <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+                <button
+                  onClick={() => setVisao("pendencias")}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition ${
+                    visao === "pendencias" ? "bg-white shadow text-gray-900" : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <FileText className="h-3 w-3" />
+                    Pendências
+                  </span>
+                </button>
+                <button
+                  onClick={() => setVisao("clientes")}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition ${
+                    visao === "clientes" ? "bg-white shadow text-gray-900" : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <Users className="h-3 w-3" />
+                    Clientes
+                  </span>
+                </button>
+              </div>
+            </div>
             {dados.evolucaoDiaria.length > 0 ? (
               <ResponsiveContainer width="100%" height={280}>
                 <LineChart data={dados.evolucaoDiaria} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
@@ -430,36 +535,128 @@ export function EntregasSantoriniEficiencia() {
                     labelFormatter={formatarData}
                   />
                   <Legend wrapperStyle={{ fontSize: "11px" }} />
-                  <Line
-                    type="monotone"
-                    dataKey="contratos"
-                    name="Contratos (RERAS)"
-                    stroke={SETOR_INFO.contratos.cor}
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="financeiro"
-                    name="Financeiro"
-                    stroke={SETOR_INFO.financeiro.cor}
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="agehab"
-                    name="AGEHAB"
-                    stroke={SETOR_INFO.agehab.cor}
-                    strokeWidth={2}
-                    dot={false}
-                  />
+                  {visao === "pendencias" ? (
+                    <>
+                      <Line
+                        type="monotone"
+                        dataKey="contratos"
+                        name="Contratos (RERAS)"
+                        stroke={SETOR_INFO.contratos.cor}
+                        strokeWidth={2}
+                        dot={false}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="financeiro"
+                        name="Financeiro"
+                        stroke={SETOR_INFO.financeiro.cor}
+                        strokeWidth={2}
+                        dot={false}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="agehab"
+                        name="AGEHAB"
+                        stroke={SETOR_INFO.agehab.cor}
+                        strokeWidth={2}
+                        dot={false}
+                      />
+                    </>
+                  ) : (
+                    <Line
+                      type="monotone"
+                      dataKey="clientesPendentes"
+                      name="Clientes pendentes"
+                      stroke="#0f766e"
+                      strokeWidth={2.5}
+                      dot={false}
+                    />
+                  )}
                 </LineChart>
               </ResponsiveContainer>
             ) : (
               <div className="text-center py-8 text-xs text-gray-500">Sem dados no período.</div>
             )}
           </div>
+
+          {/* Distribuição de pendências por cliente */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Users className="h-4 w-4 text-gray-600" />
+              <h3 className="text-sm font-semibold text-gray-900">Distribuição de pendências por cliente</h3>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">
+              Quantos clientes têm 1, 2, 3 ou 4 pendências — comparativo baseline vs hoje.
+            </p>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart
+                data={["1", "2", "3", "4"].map((k) => ({
+                  qtd: `${k} pendência${k === "1" ? "" : "s"}`,
+                  baseline: dados.distribuicao.baseline[k] || 0,
+                  atual: dados.distribuicao.atual[k] || 0,
+                }))}
+                margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                <XAxis dataKey="qtd" tick={{ fill: "#64748b", fontSize: 11 }} axisLine={{ stroke: "#e2e8f0" }} tickLine={false} />
+                <YAxis tick={{ fill: "#64748b", fontSize: 11 }} axisLine={{ stroke: "#e2e8f0" }} tickLine={false} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "white",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "6px",
+                    fontSize: "12px",
+                    padding: "8px 12px",
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: "11px" }} />
+                <Bar dataKey="baseline" name="Baseline" fill="#cbd5e1" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="atual" name="Hoje" fill="#0f766e" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+            <p className="mt-2 text-[11px] text-gray-500">
+              Cliente com 4 pendências costuma ser o mais difícil de liberar — observe se a barra "Hoje" está
+              menor que "Baseline" para confirmar progresso.
+            </p>
+          </div>
+
+          {/* Top empreendimentos com pendências */}
+          {dados.topEmpreendimentos.length > 0 && (
+            <div className="bg-white border border-gray-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Building2 className="h-4 w-4 text-indigo-600" />
+                <h3 className="text-sm font-semibold text-gray-900">
+                  Empreendimentos com mais clientes pendentes
+                </h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-gray-500">
+                      <th className="text-left py-2 font-medium">Empreendimento</th>
+                      <th className="text-right py-2 font-medium">Clientes</th>
+                      <th className="text-right py-2 font-medium">Contratos</th>
+                      <th className="text-right py-2 font-medium">Financeiro</th>
+                      <th className="text-right py-2 font-medium">AGEHAB</th>
+                      <th className="text-right py-2 font-medium">Total pend.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dados.topEmpreendimentos.map((e) => (
+                      <tr key={e.nome} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="py-2 text-gray-900 truncate max-w-[260px]">{e.nome}</td>
+                        <td className="py-2 text-right font-semibold text-gray-900">{e.clientes}</td>
+                        <td className="py-2 text-right text-gray-700">{e.contratos || "—"}</td>
+                        <td className="py-2 text-right text-gray-700">{e.financeiro || "—"}</td>
+                        <td className="py-2 text-right text-gray-700">{e.agehab || "—"}</td>
+                        <td className="py-2 text-right font-semibold text-gray-900">{e.total}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Top resolvedores */}
           <div className="bg-white border border-gray-200 rounded-xl p-4">
