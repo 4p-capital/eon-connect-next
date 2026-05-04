@@ -3,6 +3,7 @@
 import { Loader2, TrendingDown } from "lucide-react";
 import { usePermissionGuard } from "@/hooks/usePermissionGuard";
 import { EntregasSantoriniEficiencia } from "@/components/EntregasSantoriniEficiencia";
+import { EntregasSantoriniDisparoConfig } from "@/components/EntregasSantoriniDisparoConfig";
 
 export default function EntregasSantoriniEficienciaPage() {
   const { hasPermission, loading } = usePermissionGuard("entregas.santorini.eficiencia");
@@ -35,7 +36,8 @@ export default function EntregasSantoriniEficienciaPage() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 space-y-4">
+        <EntregasSantoriniDisparoConfig />
         <EntregasSantoriniEficiencia />
       </div>
     </div>
