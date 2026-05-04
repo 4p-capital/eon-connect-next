@@ -40,7 +40,7 @@ interface EficienciaResp {
   atual: Record<Setor, number>;
   resolvidas: Record<Setor, number>;
   reabertas: Record<Setor, number>;
-  clientes: { baseline: number; atual: number; liberados: number };
+  clientes: { total: number; baseline: number; atual: number; liberados: number };
   distribuicao: { baseline: Record<string, number>; atual: Record<string, number> };
   topEmpreendimentos: Array<{
     nome: string;
@@ -333,14 +333,25 @@ export function EntregasSantoriniEficiencia() {
               <div className="border-l border-white/20 pl-4">
                 <p className="text-xs text-emerald-100 mb-1">Inaptos no início</p>
                 <p className="text-2xl font-semibold">{dados.clientes.baseline}</p>
-                <p className="text-[10px] text-emerald-100">de 367 totais</p>
+                <p className="text-[10px] text-emerald-100">
+                  de {dados.clientes.total || "—"} totais
+                  {dados.clientes.total > 0 &&
+                    ` (${Math.round((dados.clientes.baseline / dados.clientes.total) * 100)}%)`}
+                </p>
               </div>
               <div className="border-l border-white/20 pl-4">
                 <p className="text-xs text-emerald-100 mb-1">Ainda pendentes hoje</p>
-                <p className="text-2xl font-semibold">{dados.clientes.atual}</p>
+                <p className="text-2xl font-semibold">
+                  {dados.clientes.atual}
+                  {dados.clientes.total > 0 && (
+                    <span className="text-base font-medium ml-1.5 text-emerald-100">
+                      ({Math.round((dados.clientes.atual / dados.clientes.total) * 100)}%)
+                    </span>
+                  )}
+                </p>
                 <p className="text-[10px] text-emerald-100">
                   {dados.clientes.baseline > 0
-                    ? `${Math.round((dados.clientes.liberados / dados.clientes.baseline) * 100)}% liberados`
+                    ? `${Math.round((dados.clientes.liberados / dados.clientes.baseline) * 100)}% liberados da campanha`
                     : "—"}
                 </p>
               </div>
@@ -388,6 +399,8 @@ export function EntregasSantoriniEficiencia() {
               <p className="text-2xl sm:text-3xl font-bold text-gray-900">{totais.atual}</p>
               <p className="text-[10px] text-gray-500 mt-1">
                 pendências · {dados.clientes.atual} clientes
+                {dados.clientes.total > 0 &&
+                  ` (${Math.round((dados.clientes.atual / dados.clientes.total) * 100)}% do total)`}
               </p>
             </div>
 
