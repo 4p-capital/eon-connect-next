@@ -1870,6 +1870,7 @@ entregasRoutes.get("/entregas/pendencias/eficiencia", async (c) => {
       resolvidas,
       reabertas,
       clientes: {
+        total: clientes?.length ?? 0,
         baseline: clientesBaseline,
         atual: clientesAtual,
         liberados: clientesLiberados,
