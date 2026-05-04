@@ -1632,12 +1632,19 @@ entregasRoutes.get("/entregas/pendencias/eficiencia", async (c) => {
     if (errBaseline) throw errBaseline;
 
     const baseline = { agehab: 0, financeiro: 0, contratos: 0 };
+    const baselinePorCampo: Record<string, number> = {
+      pendencia_agehab: 0,
+      pendencia_prosoluto: 0,
+      pendencia_jurosobra: 0,
+      pendencia_reras: 0,
+    };
     const clientesBaselineSet = new Set<string>();
     const baselineQtdPorCliente = new Map<string, number>(); // pendências por cliente no baseline
     for (const r of baselineRows || []) {
       const x = r as any;
       const s = x.setor as Setor;
       if (s in baseline) (baseline as any)[s] += 1;
+      if (x.campo in baselinePorCampo) baselinePorCampo[x.campo] += 1;
       clientesBaselineSet.add(x.cliente_entrega_id);
       baselineQtdPorCliente.set(
         x.cliente_entrega_id,
@@ -1665,6 +1672,12 @@ entregasRoutes.get("/entregas/pendencias/eficiencia", async (c) => {
     if (errClientes) throw errClientes;
 
     const atual = { agehab: 0, financeiro: 0, contratos: 0 };
+    const atualPorCampo: Record<string, number> = {
+      pendencia_agehab: 0,
+      pendencia_prosoluto: 0,
+      pendencia_jurosobra: 0,
+      pendencia_reras: 0,
+    };
     let clientesAtual = 0;
     const clientesAtualSet = new Set<string>();
     const atualQtdPorCliente = new Map<string, number>();
@@ -1682,21 +1695,25 @@ entregasRoutes.get("/entregas/pendencias/eficiencia", async (c) => {
       let qtd = 0;
       if (x.pendencia_agehab) {
         atual.agehab += 1;
+        atualPorCampo.pendencia_agehab += 1;
         porEmpreendimento[empreendimento].agehab += 1;
         qtd += 1;
       }
       if (x.pendencia_prosoluto) {
         atual.financeiro += 1;
+        atualPorCampo.pendencia_prosoluto += 1;
         porEmpreendimento[empreendimento].financeiro += 1;
         qtd += 1;
       }
       if (x.pendencia_jurosobra) {
         atual.financeiro += 1;
+        atualPorCampo.pendencia_jurosobra += 1;
         porEmpreendimento[empreendimento].financeiro += 1;
         qtd += 1;
       }
       if (x.pendencia_reras) {
         atual.contratos += 1;
+        atualPorCampo.pendencia_reras += 1;
         porEmpreendimento[empreendimento].contratos += 1;
         qtd += 1;
       }
@@ -1763,6 +1780,18 @@ entregasRoutes.get("/entregas/pendencias/eficiencia", async (c) => {
 
     const resolvidas = { agehab: 0, financeiro: 0, contratos: 0 };
     const reabertas = { agehab: 0, financeiro: 0, contratos: 0 };
+    const resolvidasPorCampo: Record<string, number> = {
+      pendencia_agehab: 0,
+      pendencia_prosoluto: 0,
+      pendencia_jurosobra: 0,
+      pendencia_reras: 0,
+    };
+    const reabertasPorCampo: Record<string, number> = {
+      pendencia_agehab: 0,
+      pendencia_prosoluto: 0,
+      pendencia_jurosobra: 0,
+      pendencia_reras: 0,
+    };
     const porResolvedor: Record<string, number> = {};
 
     for (const r of toggles || []) {
@@ -1770,10 +1799,12 @@ entregasRoutes.get("/entregas/pendencias/eficiencia", async (c) => {
       const s = x.setor as Setor;
       if (x.valor_anterior === true && x.valor_novo === false) {
         if (s in resolvidas) (resolvidas as any)[s] += 1;
+        if (x.campo in resolvidasPorCampo) resolvidasPorCampo[x.campo] += 1;
         const nome = (x.alterado_por_nome || "").trim();
         if (nome) porResolvedor[nome] = (porResolvedor[nome] || 0) + 1;
       } else if (x.valor_anterior === false && x.valor_novo === true) {
         if (s in reabertas) (reabertas as any)[s] += 1;
+        if (x.campo in reabertasPorCampo) reabertasPorCampo[x.campo] += 1;
       }
     }
 
@@ -1869,6 +1900,12 @@ entregasRoutes.get("/entregas/pendencias/eficiencia", async (c) => {
       atual,
       resolvidas,
       reabertas,
+      porCampo: {
+        baseline: baselinePorCampo,
+        atual: atualPorCampo,
+        resolvidas: resolvidasPorCampo,
+        reabertas: reabertasPorCampo,
+      },
       clientes: {
         total: clientes?.length ?? 0,
         baseline: clientesBaseline,
