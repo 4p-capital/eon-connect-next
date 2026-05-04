@@ -1485,15 +1485,13 @@ type PendenciaCampo =
   | "pendencia_agehab"
   | "pendencia_prosoluto"
   | "pendencia_jurosobra"
-  | "pendencia_reras"
-  | "pendencia_rescisao_contrato";
+  | "pendencia_reras";
 
 const CAMPO_SETOR: Record<PendenciaCampo, Setor> = {
   pendencia_agehab: "agehab",
   pendencia_prosoluto: "financeiro",
   pendencia_jurosobra: "financeiro",
   pendencia_reras: "contratos",
-  pendencia_rescisao_contrato: "contratos",
 };
 
 const SETOR_VERIFICADO_FIELD: Record<
@@ -1558,6 +1556,17 @@ entregasRoutes.post("/entregas/pendencias/toggle", async (c) => {
     const verificadoField = SETOR_VERIFICADO_FIELD[setor];
     const agoraISO = new Date().toISOString();
 
+    // Lê valor anterior antes do UPDATE (para o log de auditoria da campanha).
+    const { data: anterior } = await supabase
+      .from("clientes_entrega_santorini")
+      .select(campo)
+      .eq("id", clienteId)
+      .maybeSingle();
+    const valorAnterior =
+      anterior && typeof (anterior as any)[campo] === "boolean"
+        ? Boolean((anterior as any)[campo])
+        : null;
+
     const { data: atualizado, error: errUp } = await supabase
       .from("clientes_entrega_santorini")
       .update({
@@ -1573,6 +1582,24 @@ entregasRoutes.post("/entregas/pendencias/toggle", async (c) => {
       return c.json({ ok: false, error: "Cliente não encontrado" }, 404);
     }
 
+    // Carimba o log da campanha. Falha aqui não derruba o toggle.
+    const { error: errLog } = await supabase
+      .from("pendencias_alteracoes_log")
+      .insert({
+        cliente_entrega_id: clienteId,
+        setor,
+        campo,
+        valor_anterior: valorAnterior,
+        valor_novo: valor,
+        origem: "toggle",
+        alterado_por_user_id: (user as any).id ? String((user as any).id) : null,
+        alterado_por_nome: (user as any).nome?.trim() || null,
+        auth_user_id: authUserId,
+      });
+    if (errLog) {
+      console.error("⚠️ Falha ao gravar pendencias_alteracoes_log:", errLog);
+    }
+
     return c.json({
       ok: true,
       cliente: atualizado,
@@ -1581,5 +1608,281 @@ entregasRoutes.post("/entregas/pendencias/toggle", async (c) => {
   } catch (err) {
     console.error("❌ /entregas/pendencias/toggle:", err);
     return c.json({ ok: false, error: "Erro ao atualizar pendência" }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// 📊 EFICIÊNCIA DA CAMPANHA DE PENDÊNCIAS
+// Retorna baseline (snapshot inicial), estado atual, transições no
+// período (resolvidas/reabertas), evolução diária e top resolvedores.
+// ═══════════════════════════════════════════════════════════════════
+entregasRoutes.get("/entregas/pendencias/eficiencia", async (c) => {
+  try {
+    const dataInicio = c.req.query("dataInicio");
+    const dataFim = c.req.query("dataFim");
+    const setorFiltro = c.req.query("setor");
+
+    const supabase = getSupabase();
+
+    // 1) Baseline (por pendência): contagem por setor no snapshot inicial.
+    const { data: baselineRows, error: errBaseline } = await supabase
+      .from("pendencias_alteracoes_log")
+      .select("cliente_entrega_id, setor, campo")
+      .eq("origem", "snapshot_inicial");
+    if (errBaseline) throw errBaseline;
+
+    const baseline = { agehab: 0, financeiro: 0, contratos: 0 };
+    const clientesBaselineSet = new Set<string>();
+    const baselineQtdPorCliente = new Map<string, number>(); // pendências por cliente no baseline
+    for (const r of baselineRows || []) {
+      const x = r as any;
+      const s = x.setor as Setor;
+      if (s in baseline) (baseline as any)[s] += 1;
+      clientesBaselineSet.add(x.cliente_entrega_id);
+      baselineQtdPorCliente.set(
+        x.cliente_entrega_id,
+        (baselineQtdPorCliente.get(x.cliente_entrega_id) || 0) + 1,
+      );
+    }
+    const clientesBaseline = clientesBaselineSet.size;
+
+    // 1b) Data do snapshot inicial (para uso como default de dataInicio se omitido).
+    const { data: snapMin } = await supabase
+      .from("pendencias_alteracoes_log")
+      .select("alterado_em")
+      .eq("origem", "snapshot_inicial")
+      .order("alterado_em", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    const snapshotInicialEm = (snapMin as any)?.alterado_em || null;
+
+    // 2) Estado atual: por pendência (campo true), por cliente (qualquer true), por empreendimento.
+    const { data: clientes, error: errClientes } = await supabase
+      .from("clientes_entrega_santorini")
+      .select(
+        "id, empreendimento, pendencia_agehab, pendencia_prosoluto, pendencia_jurosobra, pendencia_reras",
+      );
+    if (errClientes) throw errClientes;
+
+    const atual = { agehab: 0, financeiro: 0, contratos: 0 };
+    let clientesAtual = 0;
+    const clientesAtualSet = new Set<string>();
+    const atualQtdPorCliente = new Map<string, number>();
+    const porEmpreendimento: Record<
+      string,
+      { agehab: number; financeiro: number; contratos: number; clientes: number }
+    > = {};
+
+    for (const r of clientes || []) {
+      const x = r as any;
+      const empreendimento = x.empreendimento || "Não informado";
+      if (!porEmpreendimento[empreendimento]) {
+        porEmpreendimento[empreendimento] = { agehab: 0, financeiro: 0, contratos: 0, clientes: 0 };
+      }
+      let qtd = 0;
+      if (x.pendencia_agehab) {
+        atual.agehab += 1;
+        porEmpreendimento[empreendimento].agehab += 1;
+        qtd += 1;
+      }
+      if (x.pendencia_prosoluto) {
+        atual.financeiro += 1;
+        porEmpreendimento[empreendimento].financeiro += 1;
+        qtd += 1;
+      }
+      if (x.pendencia_jurosobra) {
+        atual.financeiro += 1;
+        porEmpreendimento[empreendimento].financeiro += 1;
+        qtd += 1;
+      }
+      if (x.pendencia_reras) {
+        atual.contratos += 1;
+        porEmpreendimento[empreendimento].contratos += 1;
+        qtd += 1;
+      }
+      if (qtd > 0) {
+        clientesAtual += 1;
+        clientesAtualSet.add(String(x.id));
+        atualQtdPorCliente.set(String(x.id), qtd);
+        porEmpreendimento[empreendimento].clientes += 1;
+      }
+    }
+
+    // Clientes liberados desde o início = baseline ∖ atual (clientes que estavam pendentes e hoje têm 0).
+    let clientesLiberados = 0;
+    for (const id of clientesBaselineSet) {
+      if (!clientesAtualSet.has(id)) clientesLiberados += 1;
+    }
+
+    // Distribuição de pendências por cliente (quantos clientes com 1, 2, 3, 4 pendências) — baseline e atual.
+    const distribuicao = {
+      baseline: { "1": 0, "2": 0, "3": 0, "4": 0 },
+      atual: { "1": 0, "2": 0, "3": 0, "4": 0 },
+    } as { baseline: Record<string, number>; atual: Record<string, number> };
+    for (const qtd of baselineQtdPorCliente.values()) {
+      const k = String(Math.min(4, qtd));
+      distribuicao.baseline[k] = (distribuicao.baseline[k] || 0) + 1;
+    }
+    for (const qtd of atualQtdPorCliente.values()) {
+      const k = String(Math.min(4, qtd));
+      distribuicao.atual[k] = (distribuicao.atual[k] || 0) + 1;
+    }
+
+    // Top 10 empreendimentos com mais pendências (clientes pendentes hoje).
+    const topEmpreendimentos = Object.entries(porEmpreendimento)
+      .map(([nome, v]) => ({
+        nome,
+        clientes: v.clientes,
+        agehab: v.agehab,
+        financeiro: v.financeiro,
+        contratos: v.contratos,
+        total: v.agehab + v.financeiro + v.contratos,
+      }))
+      .filter((e) => e.total > 0)
+      .sort((a, b) => b.clientes - a.clientes || b.total - a.total)
+      .slice(0, 10);
+
+    // 3) Período da janela de análise.
+    const inicioISO = dataInicio
+      ? `${dataInicio}T00:00:00-03:00`
+      : (snapshotInicialEm || new Date(Date.now() - 30 * 86400000).toISOString());
+    const fimISO = dataFim ? `${dataFim}T23:59:59-03:00` : new Date().toISOString();
+
+    // 4) Transições no período: log de origem='toggle' com valor anterior != novo.
+    let qLog = supabase
+      .from("pendencias_alteracoes_log")
+      .select("cliente_entrega_id, setor, campo, valor_anterior, valor_novo, alterado_em, alterado_por_nome")
+      .eq("origem", "toggle")
+      .gte("alterado_em", inicioISO)
+      .lte("alterado_em", fimISO);
+    if (setorFiltro && ["agehab", "financeiro", "contratos"].includes(setorFiltro)) {
+      qLog = qLog.eq("setor", setorFiltro);
+    }
+    const { data: toggles, error: errToggles } = await qLog;
+    if (errToggles) throw errToggles;
+
+    const resolvidas = { agehab: 0, financeiro: 0, contratos: 0 };
+    const reabertas = { agehab: 0, financeiro: 0, contratos: 0 };
+    const porResolvedor: Record<string, number> = {};
+
+    for (const r of toggles || []) {
+      const x = r as any;
+      const s = x.setor as Setor;
+      if (x.valor_anterior === true && x.valor_novo === false) {
+        if (s in resolvidas) (resolvidas as any)[s] += 1;
+        const nome = (x.alterado_por_nome || "").trim();
+        if (nome) porResolvedor[nome] = (porResolvedor[nome] || 0) + 1;
+      } else if (x.valor_anterior === false && x.valor_novo === true) {
+        if (s in reabertas) (reabertas as any)[s] += 1;
+      }
+    }
+
+    const topResolvedores = Object.entries(porResolvedor)
+      .map(([nome, total]) => ({ nome, total }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 10);
+
+    // 5) Evolução diária — partindo do baseline e aplicando transições por dia.
+    const dayKey = (iso: string) => iso.slice(0, 10);
+    const inicioDate = new Date(inicioISO);
+    const fimDate = new Date(fimISO);
+    const dias: string[] = [];
+    {
+      const cursor = new Date(Date.UTC(inicioDate.getUTCFullYear(), inicioDate.getUTCMonth(), inicioDate.getUTCDate()));
+      const fimDay = new Date(Date.UTC(fimDate.getUTCFullYear(), fimDate.getUTCMonth(), fimDate.getUTCDate()));
+      while (cursor <= fimDay) {
+        dias.push(cursor.toISOString().slice(0, 10));
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
+    }
+
+    // Mudanças líquidas por dia/setor (resolvidas reduzem, reabertas aumentam)
+    const deltaPorDia: Record<string, { agehab: number; financeiro: number; contratos: number }> = {};
+    for (const r of toggles || []) {
+      const x = r as any;
+      const k = dayKey(x.alterado_em);
+      if (!deltaPorDia[k]) deltaPorDia[k] = { agehab: 0, financeiro: 0, contratos: 0 };
+      const delta = x.valor_anterior === true && x.valor_novo === false ? -1
+        : x.valor_anterior === false && x.valor_novo === true ? 1
+        : 0;
+      const s = x.setor as Setor;
+      if (s in deltaPorDia[k]) (deltaPorDia[k] as any)[s] += delta;
+    }
+
+    // Reconstrução de estado por cliente para a série "clientesPendentes" por dia.
+    // Estado inicial: para cada cliente do baseline, set dos campos pendentes.
+    const estadoPorCliente = new Map<string, Set<string>>();
+    for (const r of baselineRows || []) {
+      const x = r as any;
+      const id = String(x.cliente_entrega_id);
+      if (!estadoPorCliente.has(id)) estadoPorCliente.set(id, new Set<string>());
+      estadoPorCliente.get(id)!.add(x.campo);
+    }
+    // Toggles ordenados crescentes (já vêm sem ordem garantida).
+    const togglesOrd = (toggles || []).slice().sort((a: any, b: any) =>
+      String(a.alterado_em).localeCompare(String(b.alterado_em)),
+    );
+    // Inclui também eventuais toggles fora da janela mas precisamos do estado correto;
+    // como filtramos pelo período, o estado parte do baseline e aplica só os do período.
+    let cursorTog = 0;
+
+    const evolucaoDiaria: Array<{
+      data: string;
+      agehab: number;
+      financeiro: number;
+      contratos: number;
+      clientesPendentes: number;
+    }> = [];
+    let acc = { agehab: baseline.agehab, financeiro: baseline.financeiro, contratos: baseline.contratos };
+
+    for (const d of dias) {
+      const delta = deltaPorDia[d] || { agehab: 0, financeiro: 0, contratos: 0 };
+      acc = {
+        agehab: acc.agehab + delta.agehab,
+        financeiro: acc.financeiro + delta.financeiro,
+        contratos: acc.contratos + delta.contratos,
+      };
+
+      // Aplica todos os toggles do dia ao estado por cliente.
+      const fimDoDia = `${d}T23:59:59.999Z`;
+      while (cursorTog < togglesOrd.length && String((togglesOrd[cursorTog] as any).alterado_em) <= fimDoDia) {
+        const t: any = togglesOrd[cursorTog];
+        const id = String((t as any).cliente_entrega_id ?? "");
+        // O log inclui cliente_entrega_id no SELECT? — relemos com cliente_entrega_id abaixo.
+        // (campo, valor_novo) determinam mudança de pertencimento ao set.
+        const set = estadoPorCliente.get(id) || new Set<string>();
+        if (t.valor_novo === false) set.delete(t.campo);
+        else if (t.valor_novo === true) set.add(t.campo);
+        estadoPorCliente.set(id, set);
+        cursorTog++;
+      }
+
+      let clientesPendentes = 0;
+      for (const set of estadoPorCliente.values()) {
+        if (set.size > 0) clientesPendentes += 1;
+      }
+      evolucaoDiaria.push({ data: d, ...acc, clientesPendentes });
+    }
+
+    return c.json({
+      baseline,
+      atual,
+      resolvidas,
+      reabertas,
+      clientes: {
+        baseline: clientesBaseline,
+        atual: clientesAtual,
+        liberados: clientesLiberados,
+      },
+      distribuicao,
+      topEmpreendimentos,
+      evolucaoDiaria,
+      topResolvedores,
+      periodo: { inicioISO, fimISO, snapshotInicialEm },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error("❌ /entregas/pendencias/eficiencia:", err);
+    return c.json({ error: String(err) }, 500);
   }
 });

@@ -36,6 +36,7 @@ export type UserPermissions = {
           };
       agendamentos?: boolean;
       recebimento?: boolean;
+      eficiencia?: boolean;
     };
   };
 };
@@ -136,11 +137,12 @@ export const PERMISSION_TREE: PermissionTreeNode[] = [
             children: [
               { key: 'agehab', label: 'AGEHAB' },
               { key: 'financeiro', label: 'Financeiro (Pró-Soluto + Juros Obra)' },
-              { key: 'contratos', label: 'Contratos (RERAS + Rescisão de Contrato)' },
+              { key: 'contratos', label: 'Contratos (RERAS)' },
             ],
           },
           { key: 'agendamentos', label: 'Agendamentos' },
           { key: 'recebimento', label: 'Recebimento / Vistoria' },
+          { key: 'eficiencia', label: 'Eficiência da campanha (gestão)' },
         ],
       },
     ],

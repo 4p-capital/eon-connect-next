@@ -37,7 +37,6 @@ interface Cliente {
   pendencia_prosoluto: boolean;
   pendencia_jurosobra: boolean;
   pendencia_reras: boolean;
-  pendencia_rescisao_contrato: boolean;
   verificado_agehab_em: string | null;
   verificado_financeiro_em: string | null;
   verificado_contratos_em: string | null;
@@ -47,8 +46,7 @@ type PendenciaField =
   | "pendencia_agehab"
   | "pendencia_prosoluto"
   | "pendencia_jurosobra"
-  | "pendencia_reras"
-  | "pendencia_rescisao_contrato";
+  | "pendencia_reras";
 
 type Setor = "agehab" | "financeiro" | "contratos";
 type TriState = "nao_verificado" | "ok" | "pendente";
@@ -64,7 +62,6 @@ const PENDENCIA_LABELS: Record<PendenciaField, string> = {
   pendencia_prosoluto: "Pró-Soluto",
   pendencia_jurosobra: "Juros Obra",
   pendencia_reras: "RERAS",
-  pendencia_rescisao_contrato: "Rescisão Contrato",
 };
 
 const CAMPO_SETOR: Record<PendenciaField, Setor> = {
@@ -72,7 +69,6 @@ const CAMPO_SETOR: Record<PendenciaField, Setor> = {
   pendencia_prosoluto: "financeiro",
   pendencia_jurosobra: "financeiro",
   pendencia_reras: "contratos",
-  pendencia_rescisao_contrato: "contratos",
 };
 
 const SETOR_LABEL: Record<Setor, string> = {
@@ -84,7 +80,7 @@ const SETOR_LABEL: Record<Setor, string> = {
 const PENDENCIAS_POR_SETOR: Record<Setor, PendenciaField[]> = {
   agehab: ["pendencia_agehab"],
   financeiro: ["pendencia_prosoluto", "pendencia_jurosobra"],
-  contratos: ["pendencia_reras", "pendencia_rescisao_contrato"],
+  contratos: ["pendencia_reras"],
 };
 
 const SETOR_VERIFICADO_FIELD: Record<
@@ -164,7 +160,6 @@ export function EntregasSantoriniPendencias() {
       pendencia_prosoluto: canBySetor.financeiro,
       pendencia_jurosobra: canBySetor.financeiro,
       pendencia_reras: canBySetor.contratos,
-      pendencia_rescisao_contrato: canBySetor.contratos,
     }),
     [canBySetor],
   );
@@ -185,7 +180,7 @@ export function EntregasSantoriniPendencias() {
         const { data, error } = await (supabase
           .from("clientes_entrega_santorini") as ReturnType<typeof supabase.from>)
           .select(
-            "id, reserva, data_venda, bloco, unidade, cliente, cpf_cnpj, email, telefone, pendencia_agehab, pendencia_prosoluto, pendencia_jurosobra, pendencia_reras, pendencia_rescisao_contrato, verificado_agehab_em, verificado_financeiro_em, verificado_contratos_em",
+            "id, reserva, data_venda, bloco, unidade, cliente, cpf_cnpj, email, telefone, pendencia_agehab, pendencia_prosoluto, pendencia_jurosobra, pendencia_reras, verificado_agehab_em, verificado_financeiro_em, verificado_contratos_em",
           )
           .order("bloco", { ascending: true })
           .order("unidade", { ascending: true });
@@ -293,8 +288,7 @@ export function EntregasSantoriniPendencias() {
           c.pendencia_agehab ||
           c.pendencia_prosoluto ||
           c.pendencia_jurosobra ||
-          c.pendencia_reras ||
-          c.pendencia_rescisao_contrato,
+          c.pendencia_reras,
       );
     }
 
@@ -311,9 +305,7 @@ export function EntregasSantoriniPendencias() {
         (c) => c.pendencia_prosoluto || c.pendencia_jurosobra,
       ).length,
       contratosNaoVerif: clientes.filter((c) => !c.verificado_contratos_em).length,
-      contratosPendente: clientes.filter(
-        (c) => c.pendencia_reras || c.pendencia_rescisao_contrato,
-      ).length,
+      contratosPendente: clientes.filter((c) => c.pendencia_reras).length,
     }),
     [clientes],
   );

@@ -2,12 +2,13 @@
 // EDGE FUNCTION: ManyChat Notificações de Pendências
 //
 // Dispara notificações via ManyChat para clientes com pendências em aberto
-// (AGEHAB / Pró-Soluto / Juros Obra), respeitando cadência de 10 dias por
-// cliente desde o último disparo bem-sucedido.
+// (Contratos/RERAS / Pró-Soluto / Juros Obra / AGEHAB), respeitando cadência
+// de 10 dias por cliente desde o último disparo bem-sucedido.
 //
-// Regra de seleção do content:
-//   - pendencia_agehab = true                         → Content Documental (AGEHAB)
-//   - caso contrário (prosoluto OR jurosobra)         → Content Financeiro
+// Regra de seleção do content (prioridade Contratos > Financeiro > AGEHAB):
+//   - pendencia_reras = true                          → Content RERAS (Contratos)
+//   - senão pendencia_prosoluto OR pendencia_jurosobra → Content Financeiro
+//   - senão pendencia_agehab                           → Content Documental (AGEHAB)
 //
 // Invocação: chamada pelo pg_cron (seg-sex 10:00 America/Cuiaba).
 // Autenticação: header Authorization: Bearer <CRON_SECRET>
@@ -28,6 +29,7 @@ const CRON_SECRET = Deno.env.get("CRON_SECRET")!;
 // Content IDs (flow_ns) configurados no ManyChat. Se recriarem os flows, atualizar aqui.
 const CONTENT_AGEHAB_DOCUMENTAL = "content20260424131334_198241";
 const CONTENT_FINANCEIRO = "content20260423133808_754395";
+const CONTENT_RERAS = "content20260504130812_095808";
 
 // Endpoint universal do ManyChat — o prefixo /fb/ é legacy mas funciona para todos os canais (WhatsApp/IG/Messenger)
 const MANYCHAT_SEND_URL = "https://api.manychat.com/fb/sending/sendFlow";
@@ -35,12 +37,15 @@ const MANYCHAT_SEND_URL = "https://api.manychat.com/fb/sending/sendFlow";
 const CADENCIA_DIAS = 10;
 const BATCH_LIMIT = 100;
 
+type Campanha = "agehab" | "financeiro" | "contratos";
+
 type Candidate = {
   id: string;
   id_manychat: string;
   pendencia_agehab: boolean;
   pendencia_prosoluto: boolean;
   pendencia_jurosobra: boolean;
+  pendencia_reras: boolean;
 };
 
 Deno.serve(async (req) => {
@@ -68,12 +73,12 @@ Deno.serve(async (req) => {
   if (isTestMode) {
     const { data, error } = await supabase
       .from("clientes_entrega_santorini")
-      .select("id, id_manychat, pendencia_agehab, pendencia_prosoluto, pendencia_jurosobra")
+      .select("id, id_manychat, pendencia_agehab, pendencia_prosoluto, pendencia_jurosobra, pendencia_reras")
       .in("id", targetIds)
       .not("id_manychat", "is", null)
       .neq("id_manychat", "")
       .or(
-        "pendencia_agehab.eq.true,pendencia_prosoluto.eq.true,pendencia_jurosobra.eq.true",
+        "pendencia_agehab.eq.true,pendencia_prosoluto.eq.true,pendencia_jurosobra.eq.true,pendencia_reras.eq.true",
       );
     if (error) {
       console.error("Erro ao buscar candidatos (modo teste):", error);
@@ -99,17 +104,22 @@ Deno.serve(async (req) => {
     total: list.length,
     success: 0,
     failed: 0,
-    byCampanha: { agehab: 0, financeiro: 0 },
+    byCampanha: { agehab: 0, financeiro: 0, contratos: 0 },
     failures: [] as Array<{ cliente_id: string; error: string }>,
   };
 
   for (const c of list) {
-    const campanha: "agehab" | "financeiro" = c.pendencia_agehab
-      ? "agehab"
-      : "financeiro";
-    const contentId = campanha === "agehab"
-      ? CONTENT_AGEHAB_DOCUMENTAL
-      : CONTENT_FINANCEIRO;
+    // Prioridade: Contratos (RERAS) > Financeiro > AGEHAB.
+    const campanha: Campanha = c.pendencia_reras
+      ? "contratos"
+      : c.pendencia_prosoluto || c.pendencia_jurosobra
+      ? "financeiro"
+      : "agehab";
+    const contentId = campanha === "contratos"
+      ? CONTENT_RERAS
+      : campanha === "financeiro"
+      ? CONTENT_FINANCEIRO
+      : CONTENT_AGEHAB_DOCUMENTAL;
 
     let status: "success" | "failed" = "failed";
     let httpStatus: number | null = null;
@@ -152,6 +162,7 @@ Deno.serve(async (req) => {
           agehab: c.pendencia_agehab,
           prosoluto: c.pendencia_prosoluto,
           jurosobra: c.pendencia_jurosobra,
+          reras: c.pendencia_reras,
         },
         status,
         http_status: httpStatus,
