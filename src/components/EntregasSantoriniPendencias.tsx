@@ -52,10 +52,11 @@ type Setor = "agehab" | "financeiro" | "contratos";
 type TriState = "nao_verificado" | "ok" | "pendente";
 type FiltroKey =
   | "todos"
-  | "aguardando_agehab"
-  | "aguardando_financeiro"
-  | "aguardando_contratos"
-  | "com_pendencia";
+  | "com_pendencia"
+  | "pendencia_agehab"
+  | "pendencia_financeiro"
+  | "pendencia_contratos"
+  | "tudo_ok";
 
 const PENDENCIA_LABELS: Record<PendenciaField, string> = {
   pendencia_agehab: "AGEHAB",
@@ -276,19 +277,27 @@ export function EntregasSantoriniPendencias() {
       );
     }
 
-    if (filtro === "aguardando_agehab") {
-      result = result.filter((c) => !c.verificado_agehab_em);
-    } else if (filtro === "aguardando_financeiro") {
-      result = result.filter((c) => !c.verificado_financeiro_em);
-    } else if (filtro === "aguardando_contratos") {
-      result = result.filter((c) => !c.verificado_contratos_em);
-    } else if (filtro === "com_pendencia") {
+    if (filtro === "com_pendencia") {
       result = result.filter(
         (c) =>
           c.pendencia_agehab ||
           c.pendencia_prosoluto ||
           c.pendencia_jurosobra ||
           c.pendencia_reras,
+      );
+    } else if (filtro === "pendencia_agehab") {
+      result = result.filter((c) => c.pendencia_agehab);
+    } else if (filtro === "pendencia_financeiro") {
+      result = result.filter((c) => c.pendencia_prosoluto || c.pendencia_jurosobra);
+    } else if (filtro === "pendencia_contratos") {
+      result = result.filter((c) => c.pendencia_reras);
+    } else if (filtro === "tudo_ok") {
+      result = result.filter(
+        (c) =>
+          !c.pendencia_agehab &&
+          !c.pendencia_prosoluto &&
+          !c.pendencia_jurosobra &&
+          !c.pendencia_reras,
       );
     }
 
@@ -432,10 +441,11 @@ export function EntregasSantoriniPendencias() {
           {(
             [
               { key: "todos", label: "Todos" },
-              { key: "aguardando_agehab", label: "Aguardando AGEHAB" },
-              { key: "aguardando_financeiro", label: "Aguardando Financeiro" },
-              { key: "aguardando_contratos", label: "Aguardando Contratos" },
               { key: "com_pendencia", label: "Com pendência" },
+              { key: "pendencia_agehab", label: "Pendência AGEHAB" },
+              { key: "pendencia_financeiro", label: "Pendência Financeiro" },
+              { key: "pendencia_contratos", label: "Pendência Contratos" },
+              { key: "tudo_ok", label: "Tudo OK" },
             ] as { key: FiltroKey; label: string }[]
           ).map(({ key, label }) => (
             <button

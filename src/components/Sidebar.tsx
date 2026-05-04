@@ -150,7 +150,7 @@ export function Sidebar({ onWidthChange }: SidebarProps) {
             { id: 'entregas/santorini/pendencias', icon: ClipboardList, label: 'Pendências', permission: 'entregas.santorini.pendencias' },
             { id: 'entregas/santorini/agendamentos', icon: CalendarCheck, label: 'Agendamentos', permission: 'entregas.santorini.agendamentos' },
             { id: 'entregas/santorini/recebimento', icon: ScanLine, label: 'Recebimento', permission: 'entregas.santorini.recebimento' },
-            { id: 'entregas/santorini/eficiencia', icon: TrendingDown, label: 'Eficiência da campanha', permission: 'entregas.santorini.eficiencia' },
+            { id: 'entregas/santorini/eficiencia', icon: TrendingDown, label: 'Acompanhamento', permission: 'entregas.santorini.eficiencia' },
           ],
         },
       ],
