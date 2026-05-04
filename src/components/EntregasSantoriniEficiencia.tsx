@@ -35,11 +35,19 @@ import { publicAnonKey, apiBaseUrl } from "@/utils/supabase/info";
 type Setor = "agehab" | "financeiro" | "contratos";
 type Visao = "pendencias" | "clientes";
 
+type CampoPendencia = "pendencia_agehab" | "pendencia_prosoluto" | "pendencia_jurosobra" | "pendencia_reras";
+
 interface EficienciaResp {
   baseline: Record<Setor, number>;
   atual: Record<Setor, number>;
   resolvidas: Record<Setor, number>;
   reabertas: Record<Setor, number>;
+  porCampo?: {
+    baseline: Record<CampoPendencia, number>;
+    atual: Record<CampoPendencia, number>;
+    resolvidas: Record<CampoPendencia, number>;
+    reabertas: Record<CampoPendencia, number>;
+  };
   clientes: { total: number; baseline: number; atual: number; liberados: number };
   distribuicao: { baseline: Record<string, number>; atual: Record<string, number> };
   topEmpreendimentos: Array<{
@@ -427,6 +435,14 @@ export function EntregasSantoriniEficiencia() {
               const resolvidas = dados.resolvidas[s];
               const reducao = baseline > 0 ? Math.round(((baseline - atual) / baseline) * 100) : 0;
               const progresso = baseline > 0 ? Math.min(100, Math.max(0, ((baseline - atual) / baseline) * 100)) : 0;
+              // Financeiro tem 2 itens (Pró-Soluto + Juros Obra) — mostra breakdown se backend retornar.
+              const breakdown =
+                s === "financeiro" && dados.porCampo
+                  ? [
+                      { label: "Pró-Soluto", campo: "pendencia_prosoluto" as CampoPendencia },
+                      { label: "Juros Obra", campo: "pendencia_jurosobra" as CampoPendencia },
+                    ]
+                  : null;
               return (
                 <div key={s} className="bg-white border border-gray-200 rounded-xl p-4">
                   <div className="flex items-center justify-between mb-3">
@@ -458,14 +474,44 @@ export function EntregasSantoriniEficiencia() {
                       <span>Baseline</span>
                       <span className="font-semibold text-gray-900">{baseline}</span>
                     </div>
+                    {breakdown && (
+                      <div className="pl-3 border-l-2 border-gray-100 space-y-1">
+                        {breakdown.map((b) => (
+                          <div key={b.campo} className="flex items-center justify-between text-[11px] text-gray-500">
+                            <span>· {b.label}</span>
+                            <span className="font-medium text-gray-700">{dados.porCampo!.baseline[b.campo] ?? 0}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <div className="flex items-center justify-between text-gray-600">
                       <span>Hoje</span>
                       <span className="font-semibold text-gray-900">{atual}</span>
                     </div>
+                    {breakdown && (
+                      <div className="pl-3 border-l-2 border-gray-100 space-y-1">
+                        {breakdown.map((b) => (
+                          <div key={b.campo} className="flex items-center justify-between text-[11px] text-gray-500">
+                            <span>· {b.label}</span>
+                            <span className="font-medium text-gray-700">{dados.porCampo!.atual[b.campo] ?? 0}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <div className="flex items-center justify-between text-emerald-700">
                       <span>Resolvidas no período</span>
                       <span className="font-bold">{resolvidas}</span>
                     </div>
+                    {breakdown && (
+                      <div className="pl-3 border-l-2 border-emerald-100 space-y-1">
+                        {breakdown.map((b) => (
+                          <div key={b.campo} className="flex items-center justify-between text-[11px] text-emerald-600/80">
+                            <span>· {b.label}</span>
+                            <span className="font-medium">{dados.porCampo!.resolvidas[b.campo] ?? 0}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="mt-3 h-2 bg-gray-100 rounded-full overflow-hidden">
