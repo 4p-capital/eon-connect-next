@@ -26,10 +26,10 @@ export default function EntregasSantoriniEficienciaPage() {
             </div>
             <div>
               <h1 className="text-lg font-semibold text-[var(--foreground)]">
-                Eficiência da campanha — Gran Santorini
+                Acompanhamento — Gran Santorini
               </h1>
               <p className="text-sm text-[var(--muted-foreground)]">
-                Acompanhe a evolução das pendências e quantos clientes já foram liberados para recebimento.
+                Evolução das pendências, clientes liberados para recebimento e gestão dos disparos automáticos.
               </p>
             </div>
           </div>
