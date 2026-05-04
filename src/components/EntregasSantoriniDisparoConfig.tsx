@@ -13,6 +13,9 @@ import {
   ShieldCheck,
   Wallet,
   FileText,
+  ChevronDown,
+  ChevronUp,
+  Settings,
 } from "lucide-react";
 import { getSupabaseClient } from "@/utils/supabase/client";
 import { publicAnonKey, apiBaseUrl } from "@/utils/supabase/info";
@@ -74,6 +77,7 @@ export function EntregasSantoriniDisparoConfig() {
   const [erro, setErro] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [expandido, setExpandido] = useState(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -169,86 +173,127 @@ export function EntregasSantoriniDisparoConfig() {
     salvar({ [field]: next } as Partial<ConfigDisparo>);
   };
 
+  // Header de loading mantém o componente com altura mínima e silencia o estado.
   if (carregando) {
     return (
-      <div className="bg-white border border-gray-200 rounded-xl p-6 flex items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+      <div className="bg-white border border-gray-200 rounded-xl p-3 flex items-center gap-2 text-xs text-gray-500">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        Carregando configuração de disparos…
       </div>
     );
   }
 
+  // Sem config: mostra um header discreto com botão de retry, sem ocupar a tela inteira.
   if (!cfg) {
     return (
-      <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-4 flex items-center gap-2">
-        <AlertTriangle className="h-4 w-4" />
-        {erro || "Configuração não disponível."}
+      <div className="bg-white border border-gray-200 rounded-xl p-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-xs text-gray-600">
+          <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+          {erro || "Configuração de disparos indisponível."}
+        </div>
+        <button
+          onClick={carregar}
+          className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+        >
+          Tentar novamente
+        </button>
       </div>
     );
   }
 
   const cotaTotalDia = cfg.cota_agehab_dia + cfg.cota_financeiro_dia + cfg.cota_contratos_dia;
+  const totalDisparosHoje =
+    (disparosHoje?.agehab.total ?? 0) +
+    (disparosHoje?.financeiro.total ?? 0) +
+    (disparosHoje?.contratos.total ?? 0);
 
   return (
-    <div className="space-y-3">
-      {/* Header com pausa global */}
-      <div
-        className={`rounded-xl p-4 border ${
-          cfg.pausado_global ? "bg-red-50 border-red-200" : "bg-white border-gray-200"
-        }`}
+    <div
+      className={`rounded-xl border overflow-hidden ${
+        cfg.pausado_global ? "bg-red-50 border-red-200" : "bg-white border-gray-200"
+      }`}
+    >
+      {/* Header clicável (sempre visível) */}
+      <button
+        type="button"
+        onClick={() => setExpandido((v) => !v)}
+        className="w-full flex items-center justify-between gap-3 p-4 hover:bg-gray-50/60 transition-colors"
+        aria-expanded={expandido}
       >
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${cfg.pausado_global ? "bg-red-100" : "bg-blue-100"}`}>
-              <Send className={`h-5 w-5 ${cfg.pausado_global ? "text-red-600" : "text-blue-600"}`} />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-gray-900">Disparos automáticos da campanha</h3>
-              <p className="text-xs text-gray-500">
-                {cfg.pausado_global ? (
-                  <span className="text-red-700 font-semibold">⏸ Disparos pausados globalmente</span>
-                ) : (
-                  <>
-                    {cotaTotalDia} disparos/dia · {cfg.slots_por_dia} slots · cadência {cfg.cadencia_dias} dias
-                  </>
-                )}
-              </p>
-            </div>
+        <div className="flex items-center gap-3 text-left">
+          <div className={`p-2 rounded-lg ${cfg.pausado_global ? "bg-red-100" : "bg-blue-100"}`}>
+            <Settings className={`h-5 w-5 ${cfg.pausado_global ? "text-red-600" : "text-blue-600"}`} />
           </div>
-          <button
-            onClick={togglePausaGlobal}
-            disabled={salvando}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50 ${
-              cfg.pausado_global
-                ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                : "bg-red-600 text-white hover:bg-red-700"
-            }`}
-          >
-            {salvando ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : cfg.pausado_global ? (
-              <PlayCircle className="h-4 w-4" />
-            ) : (
-              <PauseCircle className="h-4 w-4" />
-            )}
-            {cfg.pausado_global ? "Retomar disparos" : "Pausar tudo"}
-          </button>
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+              Configuração da campanha
+              {cfg.pausado_global && (
+                <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-[10px] font-semibold rounded uppercase tracking-wide">
+                  Pausada
+                </span>
+              )}
+            </h3>
+            <p className="text-xs text-gray-500">
+              {cfg.pausado_global ? (
+                <span className="text-red-700">Disparos automáticos pausados globalmente</span>
+              ) : (
+                <>
+                  {cotaTotalDia} disparos/dia · {cfg.slots_por_dia} slots · cadência {cfg.cadencia_dias} dias · hoje:{" "}
+                  <span className="font-semibold text-gray-700">{totalDisparosHoje}</span>
+                </>
+              )}
+            </p>
+          </div>
         </div>
-        {feedback && (
-          <div className="mt-3 flex items-center gap-1.5 text-xs text-emerald-700">
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            {feedback}
-          </div>
-        )}
-        {erro && (
-          <div className="mt-3 flex items-center gap-1.5 text-xs text-red-700">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            {erro}
-          </div>
-        )}
-      </div>
+        <div className="flex items-center gap-2 text-xs text-gray-400">
+          {expandido ? "Recolher" : "Expandir"}
+          {expandido ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </div>
+      </button>
 
-      {/* Cards por setor */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      {/* Conteúdo expansível */}
+      {expandido && (
+        <div className="border-t border-gray-200 p-4 space-y-3 bg-white">
+          {/* Linha de pausa global */}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Send className="h-4 w-4 text-gray-500" />
+              <span className="text-sm font-medium text-gray-900">Disparos automáticos</span>
+            </div>
+            <button
+              onClick={togglePausaGlobal}
+              disabled={salvando}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-50 ${
+                cfg.pausado_global
+                  ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                  : "bg-red-600 text-white hover:bg-red-700"
+              }`}
+            >
+              {salvando ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : cfg.pausado_global ? (
+                <PlayCircle className="h-3.5 w-3.5" />
+              ) : (
+                <PauseCircle className="h-3.5 w-3.5" />
+              )}
+              {cfg.pausado_global ? "Retomar disparos" : "Pausar tudo"}
+            </button>
+          </div>
+          {feedback && (
+            <div className="flex items-center gap-1.5 text-xs text-emerald-700">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              {feedback}
+            </div>
+          )}
+          {erro && (
+            <div className="flex items-center gap-1.5 text-xs text-red-700">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              {erro}
+            </div>
+          )}
+
+          {/* Cards por setor */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {(["contratos", "financeiro", "agehab"] as Setor[]).map((s) => {
           const info = SETOR_INFO[s];
           const Icon = info.icon;
@@ -364,23 +409,25 @@ export function EntregasSantoriniDisparoConfig() {
           </div>
         </div>
 
-        <div className="mt-3 flex items-center justify-between flex-wrap gap-2">
-          <p className="text-[11px] text-gray-500">
-            Última atualização: {new Date(cfg.updated_at).toLocaleString("pt-BR")}
-            {cfg.updated_by && ` por ${cfg.updated_by}`}
-          </p>
-          {dirty && (
-            <button
-              onClick={() => salvar()}
-              disabled={salvando}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Salvar alterações
-            </button>
-          )}
+            <div className="mt-3 flex items-center justify-between flex-wrap gap-2">
+              <p className="text-[11px] text-gray-500">
+                Última atualização: {new Date(cfg.updated_at).toLocaleString("pt-BR")}
+                {cfg.updated_by && ` por ${cfg.updated_by}`}
+              </p>
+              {dirty && (
+                <button
+                  onClick={() => salvar()}
+                  disabled={salvando}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  Salvar alterações
+                </button>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
