@@ -1487,11 +1487,23 @@ type PendenciaCampo =
   | "pendencia_jurosobra"
   | "pendencia_reras";
 
-const CAMPO_SETOR: Record<PendenciaCampo, Setor> = {
+type EmContatoCampo =
+  | "em_contato_agehab"
+  | "em_contato_prosoluto"
+  | "em_contato_jurosobra"
+  | "em_contato_reras";
+
+type ToggleCampo = PendenciaCampo | EmContatoCampo;
+
+const CAMPO_SETOR: Record<ToggleCampo, Setor> = {
   pendencia_agehab: "agehab",
   pendencia_prosoluto: "financeiro",
   pendencia_jurosobra: "financeiro",
   pendencia_reras: "contratos",
+  em_contato_agehab: "agehab",
+  em_contato_prosoluto: "financeiro",
+  em_contato_jurosobra: "financeiro",
+  em_contato_reras: "contratos",
 };
 
 const SETOR_VERIFICADO_FIELD: Record<
@@ -1502,6 +1514,45 @@ const SETOR_VERIFICADO_FIELD: Record<
   financeiro: "verificado_financeiro_em",
   contratos: "verificado_contratos_em",
 };
+
+// em_contato é por campo: cada PendenciaCampo tem seu par em_contato_<sufixo>.
+const EM_CONTATO_DE_PENDENCIA: Record<PendenciaCampo, EmContatoCampo> = {
+  pendencia_agehab: "em_contato_agehab",
+  pendencia_prosoluto: "em_contato_prosoluto",
+  pendencia_jurosobra: "em_contato_jurosobra",
+  pendencia_reras: "em_contato_reras",
+};
+
+const EM_CONTATO_DESDE_FIELD: Record<
+  EmContatoCampo,
+  | "em_contato_agehab_desde"
+  | "em_contato_prosoluto_desde"
+  | "em_contato_jurosobra_desde"
+  | "em_contato_reras_desde"
+> = {
+  em_contato_agehab: "em_contato_agehab_desde",
+  em_contato_prosoluto: "em_contato_prosoluto_desde",
+  em_contato_jurosobra: "em_contato_jurosobra_desde",
+  em_contato_reras: "em_contato_reras_desde",
+};
+
+function isEmContatoCampo(campo: string): campo is EmContatoCampo {
+  return (
+    campo === "em_contato_agehab" ||
+    campo === "em_contato_prosoluto" ||
+    campo === "em_contato_jurosobra" ||
+    campo === "em_contato_reras"
+  );
+}
+
+function isPendenciaCampo(campo: string): campo is PendenciaCampo {
+  return (
+    campo === "pendencia_agehab" ||
+    campo === "pendencia_prosoluto" ||
+    campo === "pendencia_jurosobra" ||
+    campo === "pendencia_reras"
+  );
+}
 
 function podePendencia(permissions: any, setor: Setor): boolean {
   const p = permissions?.entregas?.santorini?.pendencias;
@@ -1514,7 +1565,7 @@ entregasRoutes.post("/entregas/pendencias/toggle", async (c) => {
   try {
     const body = await c.req.json();
     const clienteId = String(body?.cliente_id ?? "");
-    const campo = body?.campo as PendenciaCampo;
+    const campo = body?.campo as ToggleCampo;
     const valor = Boolean(body?.valor);
     const authUserId = String(body?.auth_user_id ?? "");
 
@@ -1551,30 +1602,68 @@ entregasRoutes.post("/entregas/pendencias/toggle", async (c) => {
       );
     }
 
-    // Qualquer ação (OK ou Pendência) conta como "verificação" pelo setor dono do campo.
-    // AGEHAB → verificado_agehab_em; Financeiro → verificado_financeiro_em; Contratos → verificado_contratos_em.
-    const verificadoField = SETOR_VERIFICADO_FIELD[setor];
     const agoraISO = new Date().toISOString();
+    const ehEmContato = isEmContatoCampo(campo);
+    const verificadoField = SETOR_VERIFICADO_FIELD[setor];
 
-    // Lê valor anterior antes do UPDATE (para o log de auditoria da campanha).
+    // em_contato é par-a-par com pendencia: cada campo de pendência tem seu
+    // em_contato. Quando o usuário troca OK/Pend de um campo, só o em_contato
+    // DAQUELE campo é desligado (não os outros do mesmo setor).
+    const emContatoFieldDoPendencia = isPendenciaCampo(campo)
+      ? EM_CONTATO_DE_PENDENCIA[campo]
+      : null;
+    const emContatoDesdeField = ehEmContato
+      ? EM_CONTATO_DESDE_FIELD[campo]
+      : emContatoFieldDoPendencia
+        ? EM_CONTATO_DESDE_FIELD[emContatoFieldDoPendencia]
+        : null;
+
+    const selectAnterior = ehEmContato
+      ? `${campo}`
+      : `${campo}, ${emContatoFieldDoPendencia}`;
+
     const { data: anterior } = await supabase
       .from("clientes_entrega_santorini")
-      .select(campo)
+      .select(selectAnterior)
       .eq("id", clienteId)
       .maybeSingle();
+
     const valorAnterior =
       anterior && typeof (anterior as any)[campo] === "boolean"
         ? Boolean((anterior as any)[campo])
         : null;
+    const emContatoAnterior =
+      !ehEmContato && emContatoFieldDoPendencia && anterior
+        ? Boolean((anterior as any)[emContatoFieldDoPendencia])
+        : false;
+
+    // Monta o UPDATE conforme o tipo de campo.
+    // - Campo de pendência (OK/Pend): atualiza pendencia_<x> + verificado_<setor>_em.
+    //   Se em_contato_<x> estava true, desliga apenas o em_contato_<x> daquele campo.
+    // - Campo em_contato: atualiza em_contato_<x> + em_contato_<x>_desde.
+    //   NÃO mexe em verificado_<setor>_em — marcar contato não é verificação.
+    const updates: Record<string, unknown> = {};
+    if (ehEmContato) {
+      updates[campo] = valor;
+      if (emContatoDesdeField) updates[emContatoDesdeField] = valor ? agoraISO : null;
+    } else {
+      updates[campo] = valor;
+      updates[verificadoField] = agoraISO;
+      if (emContatoAnterior && emContatoFieldDoPendencia && emContatoDesdeField) {
+        updates[emContatoFieldDoPendencia] = false;
+        updates[emContatoDesdeField] = null;
+      }
+    }
+
+    const selectCols = ehEmContato
+      ? `id, ${campo}, ${emContatoDesdeField}`
+      : `id, ${campo}, ${verificadoField}, ${emContatoFieldDoPendencia}, ${emContatoDesdeField}`;
 
     const { data: atualizado, error: errUp } = await supabase
       .from("clientes_entrega_santorini")
-      .update({
-        [campo]: valor,
-        [verificadoField]: agoraISO,
-      })
+      .update(updates)
       .eq("id", clienteId)
-      .select(`id, ${campo}, ${verificadoField}`)
+      .select(selectCols)
       .maybeSingle();
 
     if (errUp) throw errUp;
@@ -1582,10 +1671,9 @@ entregasRoutes.post("/entregas/pendencias/toggle", async (c) => {
       return c.json({ ok: false, error: "Cliente não encontrado" }, 404);
     }
 
-    // Carimba o log da campanha. Falha aqui não derruba o toggle.
-    const { error: errLog } = await supabase
-      .from("pendencias_alteracoes_log")
-      .insert({
+    // Log da alteração principal.
+    const logRows: Record<string, unknown>[] = [
+      {
         cliente_entrega_id: clienteId,
         setor,
         campo,
@@ -1595,7 +1683,27 @@ entregasRoutes.post("/entregas/pendencias/toggle", async (c) => {
         alterado_por_user_id: (user as any).id ? String((user as any).id) : null,
         alterado_por_nome: (user as any).nome?.trim() || null,
         auth_user_id: authUserId,
+      },
+    ];
+
+    // Se a ação derrubou em_contato_<campo> automaticamente, registra também.
+    if (!ehEmContato && emContatoAnterior && emContatoFieldDoPendencia) {
+      logRows.push({
+        cliente_entrega_id: clienteId,
+        setor,
+        campo: emContatoFieldDoPendencia,
+        valor_anterior: true,
+        valor_novo: false,
+        origem: "toggle",
+        alterado_por_user_id: (user as any).id ? String((user as any).id) : null,
+        alterado_por_nome: (user as any).nome?.trim() || null,
+        auth_user_id: authUserId,
       });
+    }
+
+    const { error: errLog } = await supabase
+      .from("pendencias_alteracoes_log")
+      .insert(logRows);
     if (errLog) {
       console.error("⚠️ Falha ao gravar pendencias_alteracoes_log:", errLog);
     }
