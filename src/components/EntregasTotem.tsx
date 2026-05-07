@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   KeyRound,
@@ -405,19 +405,67 @@ function ScanView({
   onCpfSubmit: (cpfDigitos: string) => void;
 }) {
   const [cpfOpen, setCpfOpen] = useState(false);
+  const [feedback, setFeedback] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const onTokenDetectedRef = useRef(onTokenDetected);
 
-  // Leitor HID externo (USB/Bluetooth) — comporta-se como teclado.
-  // Cada caractere chega como keydown; o sufixo Enter encerra a leitura.
-  // Pausamos a captura quando o modal de CPF está aberto para não competir
-  // com o numpad virtual.
+  useEffect(() => {
+    onTokenDetectedRef.current = onTokenDetected;
+  }, [onTokenDetected]);
+
+  // Captura de leitor HID externo (USB/Bluetooth) — comporta-se como teclado.
+  // Estratégia dupla:
+  //   1) Input invisível auto-focado: receptor primário, garante que os
+  //      keystrokes chegam mesmo se o usuário tocou em algum elemento antes.
+  //   2) Listener no `window`: fallback caso algum elemento intercepte o evento.
+  // O modal de CPF pausa a captura para o numpad virtual não conflitar.
   useEffect(() => {
     if (cpfOpen) return;
+
     let buffer = "";
     let lastKeyAt = 0;
-    const onKey = (e: KeyboardEvent) => {
-      // Ignora se o foco está em campo editável (textarea/input/contentEditable).
+
+    const processarKey = (e: KeyboardEvent) => {
+      const now = Date.now();
+      // Leitor HID dispara em ~10ms. Acima de 100ms é digitação humana
+      // (ex.: alguém apertou uma tecla por engano) — descarta o buffer.
+      if (now - lastKeyAt > 100) buffer = "";
+      lastKeyAt = now;
+
+      // Aceita Enter, NumpadEnter, e \r/\n caso o leitor envie como Tab/CR.
+      if (e.key === "Enter" || e.key === "NumpadEnter") {
+        e.preventDefault();
+        const match = buffer.match(
+          /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+        );
+        const tk = match ? match[0] : buffer.trim();
+        buffer = "";
+        // Limpa o input visualmente também
+        if (inputRef.current) inputRef.current.value = "";
+        if (tk.length > 0) {
+          // Feedback visual rápido: pisca o radar ao reconhecer
+          setFeedback(true);
+          setTimeout(() => setFeedback(false), 250);
+          onTokenDetectedRef.current(tk);
+        }
+        return;
+      }
+      if (e.key.length === 1) {
+        buffer += e.key;
+      }
+    };
+
+    // 1) Listener no input invisível
+    const inputEl = inputRef.current;
+    if (inputEl) inputEl.addEventListener("keydown", processarKey);
+
+    // 2) Listener no window (fallback)
+    const onWinKey = (e: KeyboardEvent) => {
       const tgt = e.target as HTMLElement | null;
       const tag = tgt?.tagName;
+      // Se já caiu no input invisível, ignora aqui (evita processar 2x)
+      if (tgt === inputEl) return;
+      // Se foco está em outro input/textarea editável, deixa o leitor digitar lá
       if (
         tag === "INPUT" ||
         tag === "TEXTAREA" ||
@@ -425,30 +473,45 @@ function ScanView({
       ) {
         return;
       }
-      const now = Date.now();
-      // Leitor HID dispara teclas em ~10ms. Acima de 100ms é digitação humana
-      // e o buffer é descartado para evitar falsos positivos.
-      if (now - lastKeyAt > 100) buffer = "";
-      lastKeyAt = now;
+      processarKey(e);
+    };
+    window.addEventListener("keydown", onWinKey);
 
-      if (e.key === "Enter") {
-        const match = buffer.match(
-          /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
-        );
-        const tk = match ? match[0] : buffer.trim();
-        buffer = "";
-        if (tk.length > 0) onTokenDetected(tk);
-      } else if (e.key.length === 1) {
-        buffer += e.key;
+    // Mantém o foco no input invisível (re-foca em blur)
+    const refocus = () => {
+      if (!cpfOpen && inputRef.current && document.activeElement !== inputRef.current) {
+        inputRef.current.focus();
       }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [cpfOpen, onTokenDetected]);
+    refocus();
+    const interval = setInterval(refocus, 1500);
+
+    return () => {
+      if (inputEl) inputEl.removeEventListener("keydown", processarKey);
+      window.removeEventListener("keydown", onWinKey);
+      clearInterval(interval);
+    };
+  }, [cpfOpen]);
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-8 py-6">
-      <ScannerRadar />
+      {/* Input invisível que recebe os keystrokes do leitor HID.
+          inputMode=none impede o teclado virtual de abrir em mobile. */}
+      <input
+        ref={inputRef}
+        type="text"
+        inputMode="none"
+        autoFocus
+        autoComplete="off"
+        autoCorrect="off"
+        spellCheck={false}
+        aria-hidden="true"
+        tabIndex={-1}
+        className="absolute opacity-0 pointer-events-none w-px h-px"
+        style={{ top: -9999, left: -9999 }}
+      />
+
+      <ScannerRadar feedback={feedback} />
 
       <h2 className="mt-10 text-2xl font-semibold text-white text-center max-w-md leading-snug">
         Aproxime o QR Code do seu agendamento no leitor
@@ -483,7 +546,8 @@ function ScanView({
 
 // Decoração visual — radar pulsante com ícone de QR no centro.
 // Sem câmera: a leitura é feita por leitor HID externo (USB/Bluetooth).
-function ScannerRadar() {
+// Quando `feedback=true`, pisca verde para indicar leitura reconhecida.
+function ScannerRadar({ feedback }: { feedback: boolean }) {
   return (
     <div className="relative w-72 h-72 flex items-center justify-center">
       {/* Halos pulsantes */}
@@ -491,25 +555,40 @@ function ScannerRadar() {
         initial={{ scale: 0.6, opacity: 0.6 }}
         animate={{ scale: 1.1, opacity: 0 }}
         transition={{ duration: 2.2, repeat: Infinity, ease: "easeOut" }}
-        className="absolute inset-0 rounded-full border border-amber-400/50"
+        className={`absolute inset-0 rounded-full border ${
+          feedback ? "border-emerald-400" : "border-amber-400/50"
+        }`}
       />
       <motion.div
         initial={{ scale: 0.6, opacity: 0.4 }}
         animate={{ scale: 1.05, opacity: 0 }}
         transition={{ duration: 2.2, repeat: Infinity, ease: "easeOut", delay: 0.7 }}
-        className="absolute inset-0 rounded-full border border-amber-400/40"
+        className={`absolute inset-0 rounded-full border ${
+          feedback ? "border-emerald-400/80" : "border-amber-400/40"
+        }`}
       />
       <div className="absolute inset-6 rounded-full border border-white/5" />
 
       {/* Núcleo com ícone de QR */}
-      <div className="relative w-28 h-28 rounded-2xl bg-slate-900 border border-white/10 shadow-2xl flex items-center justify-center overflow-hidden">
-        <QrCode className="w-14 h-14 text-amber-400" strokeWidth={1.5} />
+      <div
+        className={`relative w-28 h-28 rounded-2xl border shadow-2xl flex items-center justify-center overflow-hidden transition-colors ${
+          feedback
+            ? "bg-emerald-500/30 border-emerald-400"
+            : "bg-slate-900 border-white/10"
+        }`}
+      >
+        <QrCode
+          className={`w-14 h-14 ${feedback ? "text-emerald-300" : "text-amber-400"}`}
+          strokeWidth={1.5}
+        />
         {/* Linha radar atravessando o ícone */}
         <motion.div
           initial={{ y: "-100%" }}
           animate={{ y: "100%" }}
           transition={{ duration: 2.4, repeat: Infinity, ease: "linear" }}
-          className="pointer-events-none absolute inset-x-0 h-1 bg-gradient-to-b from-transparent via-amber-400 to-transparent shadow-[0_0_20px_rgba(251,191,36,0.6)]"
+          className={`pointer-events-none absolute inset-x-0 h-1 bg-gradient-to-b from-transparent to-transparent shadow-[0_0_20px_rgba(251,191,36,0.6)] ${
+            feedback ? "via-emerald-300" : "via-amber-400"
+          }`}
         />
       </div>
     </div>
