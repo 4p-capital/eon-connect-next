@@ -75,7 +75,7 @@ entregasRoutes.post("/entregas/validar-cpf", async (c) => {
     const { data: clientes, error } = await supabase
       .from("clientes_entrega_santorini")
       .select(
-        "id, cliente, cpf_cnpj, bloco, unidade, telefone, email, pendencia_agehab, pendencia_prosoluto, pendencia_jurosobra, pendencia_reras, pendencia_rescisao_contrato, agendado_em",
+        "id, cliente, cpf_cnpj, bloco, unidade, telefone, email, pendencia_agehab, pendencia_prosoluto, pendencia_jurosobra, pendencia_reras, agendado_em",
       );
 
     if (error) throw error;
@@ -100,7 +100,6 @@ entregasRoutes.post("/entregas/validar-cpf", async (c) => {
       pro_soluto: cliente.pendencia_prosoluto === true,
       juros_obra: cliente.pendencia_jurosobra === true,
       reras: cliente.pendencia_reras === true,
-      rescisao_contrato: cliente.pendencia_rescisao_contrato === true,
     };
 
     // Gate de agendamento: bloqueia se qualquer pendência estiver ativa.
@@ -108,14 +107,55 @@ entregasRoutes.post("/entregas/validar-cpf", async (c) => {
       pendencias.agehab ||
       pendencias.pro_soluto ||
       pendencias.juros_obra ||
-      pendencias.reras ||
-      pendencias.rescisao_contrato;
+      pendencias.reras;
 
     const { data: reservaAtiva } = await supabase
       .from("entrega_slot")
       .select("id, data, hora_inicio, hora_fim, reservado_em, checkin_token")
       .eq("reserva_cliente_id", cliente.id)
       .maybeSingle();
+
+    // Status da esteira (docs/vistoria/termo) quando há reserva ativa.
+    // Permite a tela de ticket mostrar onde o cliente está no processo,
+    // mesmo quando ele já passou da fase de agendamento.
+    let esteira: {
+      vistoria_id: string | null;
+      vistoria_status: string | null;
+      docs_validados_em: string | null;
+      vistoria_iniciada_em: string | null;
+      vistoria_finalizada_em: string | null;
+      parecer_cliente: string | null;
+      termo_assinado_em: string | null;
+    } | null = null;
+
+    if (reservaAtiva) {
+      const { data: vistoria } = await supabase
+        .from("vistoria_entrega")
+        .select(
+          "id, status, docs_validados_em, iniciada_em, finalizada_em, parecer_cliente, termo_assinado_em",
+        )
+        .eq("entrega_slot_id", (reservaAtiva as any).id)
+        .maybeSingle();
+      esteira = {
+        vistoria_id: vistoria ? ((vistoria as any).id as string) : null,
+        vistoria_status: vistoria ? ((vistoria as any).status as string) : null,
+        docs_validados_em: vistoria
+          ? ((vistoria as any).docs_validados_em as string | null)
+          : null,
+        vistoria_iniciada_em: vistoria
+          ? ((vistoria as any).iniciada_em as string | null)
+          : null,
+        vistoria_finalizada_em: vistoria
+          ? ((vistoria as any).finalizada_em as string | null)
+          : null,
+        parecer_cliente: vistoria
+          ? ((vistoria as any).parecer_cliente as string | null)
+          : null,
+        termo_assinado_em: vistoria
+          ? ((vistoria as any).termo_assinado_em as string | null)
+          : null,
+      };
+    }
 
     return c.json({
       ok: !temPendencia,
@@ -139,6 +179,7 @@ entregasRoutes.post("/entregas/validar-cpf", async (c) => {
             checkin_token: (reservaAtiva as any).checkin_token,
           }
         : null,
+      esteira,
       data_minima_agendavel: dataMinimaAgendavel(),
     });
   } catch (err) {
@@ -242,7 +283,7 @@ entregasRoutes.post("/entregas/reservar", async (c) => {
     const { data: clientes, error: errCli } = await supabase
       .from("clientes_entrega_santorini")
       .select(
-        "id, cliente, bloco, unidade, telefone, pendencia_agehab, pendencia_prosoluto, pendencia_jurosobra, pendencia_reras, pendencia_rescisao_contrato, cpf_cnpj",
+        "id, cliente, bloco, unidade, telefone, pendencia_agehab, pendencia_prosoluto, pendencia_jurosobra, pendencia_reras, cpf_cnpj",
       );
     if (errCli) throw errCli;
 
@@ -262,8 +303,7 @@ entregasRoutes.post("/entregas/reservar", async (c) => {
       cliente.pendencia_agehab ||
       cliente.pendencia_prosoluto ||
       cliente.pendencia_jurosobra ||
-      cliente.pendencia_reras ||
-      cliente.pendencia_rescisao_contrato
+      cliente.pendencia_reras
     ) {
       return c.json(
         {
@@ -317,8 +357,19 @@ entregasRoutes.post("/entregas/reservar", async (c) => {
       .maybeSingle();
 
     if (errReserva) {
+      // 23505 = unique_violation. O detalhe (`details`) ou a mensagem podem
+      // mencionar o índice ou a coluna conflitante. Cobrimos os 3 caminhos
+      // pra não cair no fallback genérico só porque o supabase-js mudou o
+      // shape do erro entre versões.
+      const code = String((errReserva as { code?: string }).code ?? "");
       const msg = String(errReserva.message ?? "");
-      if (msg.includes("idx_entrega_slot_um_por_cliente")) {
+      const details = String((errReserva as { details?: string }).details ?? "");
+      const conflitoCliente =
+        code === "23505" &&
+        (msg.includes("idx_entrega_slot_um_por_cliente") ||
+          details.includes("idx_entrega_slot_um_por_cliente") ||
+          details.includes("reserva_cliente_id"));
+      if (conflitoCliente) {
         return c.json(
           {
             ok: false,
@@ -621,7 +672,7 @@ entregasRoutes.get("/entregas/checkin/:token", async (c) => {
          clientes_entrega_santorini!entrega_slot_reserva_cliente_id_fkey (
            id, cliente, bloco, unidade, cpf_cnpj, telefone, email, reserva,
            pendencia_agehab, pendencia_prosoluto, pendencia_jurosobra,
-           pendencia_reras, pendencia_rescisao_contrato
+           pendencia_reras
          )`,
       )
       .eq("checkin_token", token)
@@ -671,7 +722,6 @@ entregasRoutes.get("/entregas/checkin/:token", async (c) => {
           pro_soluto: cli?.pendencia_prosoluto === true,
           juros_obra: cli?.pendencia_jurosobra === true,
           reras: cli?.pendencia_reras === true,
-          rescisao_contrato: cli?.pendencia_rescisao_contrato === true,
         },
       },
       vistoria: vistoria ?? null,
@@ -1448,6 +1498,207 @@ entregasRoutes.post("/entregas/assinar/:token/confirmar", async (c) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
+// TOTEM (modo kiosque) — leitor de QR + busca por CPF + pesquisa
+// ═══════════════════════════════════════════════════════════════════
+//
+// Operadores no canteiro abrem /totem em um tablet. As rotas abaixo são
+// públicas (mesma classe que /entregas/assinar/:token), pois o totem
+// fica em ambiente físico controlado.
+// ───────────────────────────────────────────────────────────────────
+
+// GET /entregas/totem/buscar-por-cpf?cpf=...
+// Resolve CPF → checkin_token do slot ativo do cliente.
+// O frontend então chama o GET /entregas/assinar/:token existente com
+// esse token (mesma validação: vistoria apta + termo não assinado).
+// Aceita CPF com ou sem máscara — comparação por dígitos apenas.
+entregasRoutes.get("/entregas/totem/buscar-por-cpf", async (c) => {
+  try {
+    const cpfRaw = c.req.query("cpf") ?? "";
+    const cpfDigitos = cpfRaw.replace(/\D/g, "");
+
+    if (cpfDigitos.length !== 11) {
+      return c.json(
+        { ok: false, error: "CPF deve ter 11 dígitos", code: "CPF_INVALIDO" },
+        400,
+      );
+    }
+
+    const supabase = getSupabase();
+
+    // Busca clientes cujos dígitos do cpf_cnpj batem.
+    // Filtragem em SQL via regexp_replace para ignorar a máscara armazenada.
+    const { data: clientes, error: errCli } = await supabase
+      .from("clientes_entrega_santorini")
+      .select("id, cliente, cpf_cnpj")
+      .filter("cpf_cnpj", "not.is", null);
+
+    if (errCli) throw errCli;
+
+    const candidatos = (clientes ?? []).filter(
+      (c) => String((c as any).cpf_cnpj ?? "").replace(/\D/g, "") === cpfDigitos,
+    );
+
+    if (candidatos.length === 0) {
+      return c.json(
+        { ok: false, error: "CPF não encontrado", code: "CPF_NAO_ENCONTRADO" },
+        404,
+      );
+    }
+
+    // Para cada cliente candidato, busca slot ativo (não assinado).
+    const clienteIds = candidatos.map((c) => (c as any).id);
+    const { data: slots, error: errSlots } = await supabase
+      .from("entrega_slot")
+      .select("checkin_token, reserva_cliente_id, token_usado_assinatura_em, data, hora_inicio")
+      .in("reserva_cliente_id", clienteIds)
+      .is("token_usado_assinatura_em", null);
+
+    if (errSlots) throw errSlots;
+
+    const slotsAtivos = slots ?? [];
+    if (slotsAtivos.length === 0) {
+      return c.json(
+        {
+          ok: false,
+          error: "Nenhum agendamento ativo encontrado para este CPF",
+          code: "SEM_AGENDAMENTO_ATIVO",
+        },
+        404,
+      );
+    }
+
+    if (slotsAtivos.length > 1) {
+      return c.json(
+        {
+          ok: false,
+          error:
+            "Mais de um agendamento ativo encontrado. Use o QR Code do agendamento específico.",
+          code: "AMBIGUO",
+        },
+        409,
+      );
+    }
+
+    return c.json({
+      ok: true,
+      checkin_token: (slotsAtivos[0] as any).checkin_token,
+    });
+  } catch (err) {
+    console.error("❌ /entregas/totem/buscar-por-cpf:", err);
+    return c.json({ ok: false, error: "Erro ao buscar CPF" }, 500);
+  }
+});
+
+// POST /entregas/totem/pesquisa/:token
+// Persiste a pesquisa de satisfação respondida pelo cliente no totem.
+// NÃO queima o token nem dispara assinatura — isso virá em outra etapa.
+// Mesma validação de elegibilidade do GET /entregas/assinar/:token.
+entregasRoutes.post("/entregas/totem/pesquisa/:token", async (c) => {
+  try {
+    const token = c.req.param("token");
+    if (!token) return c.json({ ok: false, error: "Token inválido" }, 400);
+
+    const body = await c.req.json();
+    const {
+      qualidade_apartamento,
+      qualidade_areas_comuns,
+      item_apto_favorito,
+      parte_apto_favorita,
+      item_lazer_favorito,
+      sugestao_melhoria,
+      estrelas,
+    } = body ?? {};
+
+    const QUALIDADE_VALIDA = ["amei", "superou", "dentro_esperado", "abaixo", "deixa_desejar"];
+    const ITEM_APTO_VALIDO = [
+      "area_servico_externa","previsao_ar_quarto_sala","tomada_usb_bancada",
+      "armario_planejado_banheiro","dois_pontos_tv_sala","janelas_amplas_2m_sala",
+      "piso_laminado_madeira_quartos",
+    ];
+    const PARTE_APTO_VALIDA = ["quartos","banheiro","cozinha","sala","area_servico_externa"];
+    const ITEM_LAZER_VALIDO = [
+      "guarita","quadra_esporte","playground","espaco_gourmet","churrasqueira",
+      "piscinas","academia","pet_place","redario","car_wash",
+      "carregamento_carro_eletrico","horta_comunitaria","bicicletarios_blocos",
+    ];
+
+    if (
+      !QUALIDADE_VALIDA.includes(qualidade_apartamento) ||
+      !QUALIDADE_VALIDA.includes(qualidade_areas_comuns) ||
+      !ITEM_APTO_VALIDO.includes(item_apto_favorito) ||
+      !PARTE_APTO_VALIDA.includes(parte_apto_favorita) ||
+      !ITEM_LAZER_VALIDO.includes(item_lazer_favorito) ||
+      typeof estrelas !== "number" ||
+      !Number.isInteger(estrelas) ||
+      estrelas < 1 ||
+      estrelas > 5
+    ) {
+      return c.json(
+        { ok: false, error: "Respostas inválidas", code: "RESPOSTA_INVALIDA" },
+        400,
+      );
+    }
+
+    const supabase = getSupabase();
+
+    const { data: slot, error: errSlot } = await supabase
+      .from("entrega_slot")
+      .select("id, token_usado_assinatura_em")
+      .eq("checkin_token", token)
+      .maybeSingle();
+
+    if (errSlot) throw errSlot;
+    if (!slot) return c.json({ ok: false, error: "Token inválido" }, 404);
+    if ((slot as any).token_usado_assinatura_em) {
+      return c.json(
+        { ok: false, error: "Termo já assinado", code: "JA_ASSINADO" },
+        409,
+      );
+    }
+
+    const { data: vistoria } = await supabase
+      .from("vistoria_entrega")
+      .select("id, status")
+      .eq("entrega_slot_id", (slot as any).id)
+      .maybeSingle();
+
+    if (!vistoria || (vistoria as any).status !== "finalizada_apto") {
+      return c.json(
+        { ok: false, error: "Vistoria não está apta", code: "NAO_APTO" },
+        403,
+      );
+    }
+
+    // UPSERT pra permitir o cliente revisar respostas (raro, mas tablet).
+    const { error: errResp } = await supabase
+      .from("vistoria_pesquisa_resposta")
+      .upsert(
+        {
+          vistoria_id: (vistoria as any).id,
+          qualidade_apartamento,
+          qualidade_areas_comuns,
+          item_apto_favorito,
+          parte_apto_favorita,
+          item_lazer_favorito,
+          sugestao_melhoria: typeof sugestao_melhoria === "string"
+            ? sugestao_melhoria.trim().slice(0, 2000) || null
+            : null,
+          estrelas,
+          respondido_em: new Date().toISOString(),
+        },
+        { onConflict: "vistoria_id" },
+      );
+
+    if (errResp) throw errResp;
+
+    return c.json({ ok: true });
+  } catch (err) {
+    console.error("❌ /entregas/totem/pesquisa POST:", err);
+    return c.json({ ok: false, error: "Erro ao gravar pesquisa" }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
 // Admin: catálogo de itens (para futura tela de gerenciamento)
 // ═══════════════════════════════════════════════════════════════════
 entregasRoutes.get("/entregas/catalogo-itens", async (c) => {
@@ -1475,7 +1726,6 @@ entregasRoutes.get("/entregas/catalogo-itens", async (c) => {
 //   pendencia_prosoluto           → Financeiro (verificado_financeiro_em)
 //   pendencia_jurosobra           → Financeiro (verificado_financeiro_em)
 //   pendencia_reras               → Contratos  (verificado_contratos_em)
-//   pendencia_rescisao_contrato   → Contratos  (verificado_contratos_em)
 // Valida permissão a partir de User.permissions (auth_user_id).
 // ═══════════════════════════════════════════════════════════════════
 
