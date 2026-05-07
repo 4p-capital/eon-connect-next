@@ -47,7 +47,6 @@ type Pendencias = {
   pro_soluto: boolean;
   juros_obra: boolean;
   reras: boolean;
-  rescisao_contrato: boolean;
 };
 
 type ReservaAtiva = {
@@ -58,6 +57,16 @@ type ReservaAtiva = {
   reservado_em: string;
   checkin_token?: string | null;
 };
+
+type EsteiraStatus = {
+  vistoria_id: string | null;
+  vistoria_status: string | null;
+  docs_validados_em: string | null;
+  vistoria_iniciada_em: string | null;
+  vistoria_finalizada_em: string | null;
+  parecer_cliente: string | null;
+  termo_assinado_em: string | null;
+} | null;
 
 type HorarioSlot = {
   id: string;
@@ -119,6 +128,7 @@ export function AgendarEntregaChaves() {
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [pendencias, setPendencias] = useState<Pendencias | null>(null);
   const [reserva, setReserva] = useState<ReservaAtiva | null>(null);
+  const [esteira, setEsteira] = useState<EsteiraStatus>(null);
 
   const [dias, setDias] = useState<DiaDisponivel[]>([]);
   const [diaSelecionado, setDiaSelecionado] = useState<DiaDisponivel | null>(null);
@@ -187,13 +197,21 @@ export function AgendarEntregaChaves() {
       setCliente(data.cliente as Cliente);
       setPendencias(data.pendencias as Pendencias);
       setReserva(data.reserva_ativa ?? null);
+      const esteiraData = (data.esteira ?? null) as EsteiraStatus;
+      setEsteira(esteiraData);
 
+      // Se cliente já tem reserva, manda direto pro ticket — mesmo com
+      // pendência aberta, desde que a vistoria já tenha sido criada
+      // (equipe permitiu o cliente avançar). Caso contrário, a pendência
+      // ainda bloqueia o agendamento.
+      if (data.reserva_ativa) {
+        if (esteiraData?.vistoria_id || !data.tem_pendencia) {
+          setEtapa("ticket");
+          return;
+        }
+      }
       if (data.tem_pendencia) {
         setEtapa("pendencia");
-        return;
-      }
-      if (data.reserva_ativa) {
-        setEtapa("ticket");
         return;
       }
 
@@ -336,6 +354,7 @@ export function AgendarEntregaChaves() {
     setCliente(null);
     setPendencias(null);
     setReserva(null);
+    setEsteira(null);
     setDias([]);
     setDiaSelecionado(null);
     setErro(null);
@@ -772,6 +791,11 @@ export function AgendarEntregaChaves() {
                 <div className="absolute right-0 translate-x-1/2 w-6 h-6 rounded-full bg-[var(--background-alt)]" />
               </div>
 
+              {/* Status da esteira */}
+              <div className="px-6 pb-2">
+                <EsteiraTimeline esteira={esteira} />
+              </div>
+
               {/* Aviso + rodapé */}
               <div className="px-6 pb-6 space-y-3">
                 <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 space-y-3">
@@ -795,13 +819,20 @@ export function AgendarEntregaChaves() {
                   Você receberá um lembrete por WhatsApp em breve.
                 </p>
 
-                <button
-                  onClick={handleCancelarEReagendar}
-                  disabled={loading}
-                  className="w-full py-3 rounded-xl border border-[var(--border)] text-sm font-medium hover:bg-[var(--background-alt)] transition-all disabled:opacity-50"
-                >
-                  {loading ? "Cancelando..." : "Cancelar e Reagendar"}
-                </button>
+                {podeReagendar(esteira) ? (
+                  <button
+                    onClick={handleCancelarEReagendar}
+                    disabled={loading}
+                    className="w-full py-3 rounded-xl border border-[var(--border)] text-sm font-medium hover:bg-[var(--background-alt)] transition-all disabled:opacity-50"
+                  >
+                    {loading ? "Cancelando..." : "Cancelar e Reagendar"}
+                  </button>
+                ) : (
+                  <p className="text-center text-xs text-[var(--muted-foreground)] py-2">
+                    Não é mais possível reagendar — o processo já está em andamento.
+                    Para qualquer alteração, fale com nosso atendimento.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -815,5 +846,186 @@ export function AgendarEntregaChaves() {
         )}
       </main>
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Status da esteira (timeline) e regra de reagendamento
+// ═══════════════════════════════════════════════════════════════════
+
+function podeReagendar(esteira: EsteiraStatus): boolean {
+  // Cliente só pode reagendar enquanto a vistoria não começou. Depois disso
+  // (em andamento, finalizada, termo assinado), a operação é ditada pela
+  // equipe de campo — não faz sentido permitir trocar a data sozinho.
+  if (!esteira) return true;
+  if (!esteira.vistoria_id) return true;
+  return esteira.vistoria_status === "aguardando_docs";
+}
+
+type EtapaTimeline = {
+  label: string;
+  estado: "pendente" | "ativo" | "concluido" | "alerta";
+  detalhe?: string;
+};
+
+function montarEtapas(esteira: EsteiraStatus): EtapaTimeline[] {
+  const etapas: EtapaTimeline[] = [];
+
+  // Agendamento — sempre concluído quando estamos no ticket
+  etapas.push({
+    label: "Agendamento confirmado",
+    estado: "concluido",
+  });
+
+  // Documentação
+  if (esteira?.docs_validados_em) {
+    etapas.push({
+      label: "Documentação validada",
+      estado: "concluido",
+      detalhe: formatarDataHoraCurta(esteira.docs_validados_em),
+    });
+  } else {
+    etapas.push({
+      label: "Documentação",
+      estado: esteira?.vistoria_id ? "ativo" : "pendente",
+      detalhe: esteira?.vistoria_id
+        ? "Aguardando validação no dia da entrega"
+        : "Será validada no dia da entrega",
+    });
+  }
+
+  // Vistoria
+  const status = esteira?.vistoria_status;
+  if (status === "finalizada_apto") {
+    etapas.push({
+      label: "Vistoria aprovada",
+      estado: "concluido",
+      detalhe: esteira?.vistoria_finalizada_em
+        ? formatarDataHoraCurta(esteira.vistoria_finalizada_em)
+        : undefined,
+    });
+  } else if (status === "finalizada_nao_apto") {
+    etapas.push({
+      label: "Vistoria não aprovada",
+      estado: "alerta",
+      detalhe: "Procure nosso atendimento",
+    });
+  } else if (status === "vistoria_em_andamento") {
+    etapas.push({
+      label: "Vistoria em andamento",
+      estado: "ativo",
+    });
+  } else if (status === "docs_validados") {
+    etapas.push({
+      label: "Vistoria",
+      estado: "ativo",
+      detalhe: "Pronta para começar",
+    });
+  } else {
+    etapas.push({
+      label: "Vistoria",
+      estado: "pendente",
+    });
+  }
+
+  // Termo
+  if (esteira?.termo_assinado_em) {
+    etapas.push({
+      label: "Termo assinado",
+      estado: "concluido",
+      detalhe: formatarDataHoraCurta(esteira.termo_assinado_em),
+    });
+  } else if (status === "finalizada_apto") {
+    etapas.push({
+      label: "Assinatura do termo",
+      estado: "ativo",
+      detalhe: "Aguardando assinatura no totem",
+    });
+  } else {
+    etapas.push({ label: "Assinatura do termo", estado: "pendente" });
+  }
+
+  return etapas;
+}
+
+function formatarDataHoraCurta(iso: string): string {
+  const d = new Date(iso);
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(d);
+}
+
+function EsteiraTimeline({ esteira }: { esteira: EsteiraStatus }) {
+  const etapas = montarEtapas(esteira);
+
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--background-alt)]/40 p-4">
+      <p className="text-[10px] uppercase tracking-widest text-[var(--muted-foreground)] mb-3">
+        Status do recebimento
+      </p>
+      <ol className="space-y-3">
+        {etapas.map((e, idx) => (
+          <li key={idx} className="flex gap-3">
+            <div className="flex flex-col items-center">
+              <EsteiraDot estado={e.estado} />
+              {idx < etapas.length - 1 && (
+                <div className="flex-1 w-px bg-[var(--border)] my-1" />
+              )}
+            </div>
+            <div className="pb-1">
+              <p
+                className={`text-sm font-medium ${
+                  e.estado === "concluido"
+                    ? "text-[var(--foreground)]"
+                    : e.estado === "ativo"
+                      ? "text-[var(--foreground)]"
+                      : e.estado === "alerta"
+                        ? "text-rose-700"
+                        : "text-[var(--muted-foreground)]"
+                }`}
+              >
+                {e.label}
+              </p>
+              {e.detalhe && (
+                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                  {e.detalhe}
+                </p>
+              )}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function EsteiraDot({ estado }: { estado: EtapaTimeline["estado"] }) {
+  if (estado === "concluido") {
+    return (
+      <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
+        <CheckCircle2 className="w-4 h-4 text-white" />
+      </div>
+    );
+  }
+  if (estado === "ativo") {
+    return (
+      <div className="w-6 h-6 rounded-full bg-amber-100 border-2 border-amber-500 flex items-center justify-center flex-shrink-0">
+        <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+      </div>
+    );
+  }
+  if (estado === "alerta") {
+    return (
+      <div className="w-6 h-6 rounded-full bg-rose-100 border-2 border-rose-500 flex items-center justify-center flex-shrink-0">
+        <AlertTriangle className="w-3 h-3 text-rose-600" />
+      </div>
+    );
+  }
+  return (
+    <div className="w-6 h-6 rounded-full bg-[var(--background)] border-2 border-[var(--border)] flex-shrink-0" />
   );
 }
