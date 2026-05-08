@@ -594,34 +594,42 @@ export function EntregasSantoriniEficiencia() {
                     labelFormatter={formatarData}
                   />
                   <Legend wrapperStyle={{ fontSize: "11px" }} />
-                  {visao === "pendencias" ? (
-                    <>
-                      <Line
-                        type="monotone"
-                        dataKey="contratos"
-                        name="Contratos (RERAS)"
-                        stroke={SETOR_INFO.contratos.cor}
-                        strokeWidth={2}
-                        dot={false}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="financeiro"
-                        name="Financeiro"
-                        stroke={SETOR_INFO.financeiro.cor}
-                        strokeWidth={2}
-                        dot={false}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="agehab"
-                        name="AGEHAB"
-                        stroke={SETOR_INFO.agehab.cor}
-                        strokeWidth={2}
-                        dot={false}
-                      />
-                    </>
-                  ) : (
+                  {/* IMPORTANTE: cada <Line> precisa ser child DIRETO do <LineChart>.
+                      Recharts faz React.Children.map sem desrolar Fragments — agrupar
+                      múltiplas Lines com <>...</> faz com que todas sejam ignoradas
+                      (resultado: gráfico vazio, sem eixo Y). Por isso renderizamos
+                      cada Line condicionalmente em vez de envolver em fragment. */}
+                  {visao === "pendencias" && (
+                    <Line
+                      type="monotone"
+                      dataKey="contratos"
+                      name="Contratos (RERAS)"
+                      stroke={SETOR_INFO.contratos.cor}
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  )}
+                  {visao === "pendencias" && (
+                    <Line
+                      type="monotone"
+                      dataKey="financeiro"
+                      name="Financeiro"
+                      stroke={SETOR_INFO.financeiro.cor}
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  )}
+                  {visao === "pendencias" && (
+                    <Line
+                      type="monotone"
+                      dataKey="agehab"
+                      name="AGEHAB"
+                      stroke={SETOR_INFO.agehab.cor}
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  )}
+                  {visao === "clientes" && (
                     <Line
                       type="monotone"
                       dataKey="clientesPendentes"
