@@ -406,18 +406,31 @@ function ScanView({
 }) {
   const [cpfOpen, setCpfOpen] = useState(false);
   const [feedback, setFeedback] = useState(false);
+  const [debug, setDebug] = useState<{
+    keystrokes: number;
+    lastKey: string;
+    lastSrc: string;
+    lastAt: number;
+    focused: boolean;
+    bufferLen: number;
+  }>({ keystrokes: 0, lastKey: "—", lastSrc: "—", lastAt: 0, focused: false, bufferLen: 0 });
   const inputRef = useRef<HTMLInputElement>(null);
   const onTokenDetectedRef = useRef(onTokenDetected);
+
+  // Habilita o painel de diagnóstico só com `?debug=1` na URL.
+  const debugEnabled =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("debug") === "1";
 
   useEffect(() => {
     onTokenDetectedRef.current = onTokenDetected;
   }, [onTokenDetected]);
 
   // Captura de leitor HID externo (USB/Bluetooth) — comporta-se como teclado.
-  // Estratégia dupla:
-  //   1) Input invisível auto-focado: receptor primário, garante que os
-  //      keystrokes chegam mesmo se o usuário tocou em algum elemento antes.
-  //   2) Listener no `window`: fallback caso algum elemento intercepte o evento.
+  // Em Chrome Android, `inputMode=none` e `pointer-events-none` podem impedir
+  // o input invisível de receber keystrokes externos, então a captura roda
+  // primária no `document` (cobre Android) com o input invisível focado só
+  // pra "ancorar" o foco e evitar abrir teclado virtual em outros elementos.
   // O modal de CPF pausa a captura para o numpad virtual não conflitar.
   useEffect(() => {
     if (cpfOpen) return;
@@ -426,12 +439,23 @@ function ScanView({
     let lastKeyAt = 0;
     let feedbackTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    const processarKey = (e: KeyboardEvent) => {
+    const processarKey = (e: KeyboardEvent, src: string) => {
       const now = Date.now();
       // Leitor HID dispara em ~10ms. Acima de 100ms é digitação humana
       // (ex.: alguém apertou uma tecla por engano) — descarta o buffer.
       if (now - lastKeyAt > 100) buffer = "";
       lastKeyAt = now;
+
+      if (debugEnabled) {
+        setDebug((d) => ({
+          ...d,
+          keystrokes: d.keystrokes + 1,
+          lastKey: e.key,
+          lastSrc: src,
+          lastAt: now,
+          bufferLen: buffer.length + (e.key.length === 1 ? 1 : 0),
+        }));
+      }
 
       // Aceita Enter (principal e numpad) e Tab como sufixos de fim de leitura.
       // Tab é comum em leitores configurados como "wedge" para campos de form.
@@ -458,61 +482,76 @@ function ScanView({
       }
     };
 
-    // 1) Listener no input invisível
-    const inputEl = inputRef.current;
-    if (inputEl) inputEl.addEventListener("keydown", processarKey);
-
-    // 2) Listener no window (fallback)
-    const onWinKey = (e: KeyboardEvent) => {
+    // Listener primário no document — cobre Android, onde o input invisível
+    // pode não receber keydown de teclado externo.
+    const onDocKey = (e: KeyboardEvent) => {
       const tgt = e.target as HTMLElement | null;
       const tag = tgt?.tagName;
-      // Se já caiu no input invisível, ignora aqui (evita processar 2x)
-      if (tgt === inputEl) return;
-      // Se foco está em outro input/textarea editável, deixa o leitor digitar lá
+      // Se foco está em input/textarea visível (ex.: modal CPF), deixa
+      // o leitor digitar lá e não duplica.
       if (
-        tag === "INPUT" ||
-        tag === "TEXTAREA" ||
-        (tgt && tgt.isContentEditable)
+        tgt !== inputRef.current &&
+        (tag === "INPUT" ||
+          tag === "TEXTAREA" ||
+          (tgt && tgt.isContentEditable))
       ) {
         return;
       }
-      processarKey(e);
+      processarKey(e, tag === "INPUT" ? "hidden-input" : "document");
     };
-    window.addEventListener("keydown", onWinKey);
+    document.addEventListener("keydown", onDocKey, true);
 
     // Mantém o foco no input invisível (re-foca em blur)
     const refocus = () => {
       if (!cpfOpen && inputRef.current && document.activeElement !== inputRef.current) {
         inputRef.current.focus();
       }
+      if (debugEnabled) {
+        setDebug((d) => ({
+          ...d,
+          focused: document.activeElement === inputRef.current,
+        }));
+      }
     };
     refocus();
     const interval = setInterval(refocus, 1500);
 
     return () => {
-      if (inputEl) inputEl.removeEventListener("keydown", processarKey);
-      window.removeEventListener("keydown", onWinKey);
+      document.removeEventListener("keydown", onDocKey, true);
       clearInterval(interval);
       if (feedbackTimeout) clearTimeout(feedbackTimeout);
     };
-  }, [cpfOpen]);
+  }, [cpfOpen, debugEnabled]);
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-8 py-6">
-      {/* Input invisível que recebe os keystrokes do leitor HID.
-          inputMode=none impede o teclado virtual de abrir em mobile.
-          O foco é mantido por setInterval no efeito acima. */}
+      {/* Input "ancora" de foco — em Android, `pointer-events-none` e
+          `inputMode=none` podem fazer o input ignorar teclado externo,
+          então removemos ambos. Fica posicionado dentro da viewport
+          (não em top:-9999, que pode causar scroll/foco inconsistente em
+          mobile) com opacity 0 e tamanho 1px. A captura real acontece no
+          listener do `document`. */}
       <input
         ref={inputRef}
         type="text"
-        inputMode="none"
         autoComplete="off"
         autoCorrect="off"
         spellCheck={false}
         tabIndex={-1}
-        className="absolute opacity-0 pointer-events-none w-px h-px"
-        style={{ top: -9999, left: -9999 }}
+        className="fixed top-0 left-0 w-px h-px opacity-0"
+        style={{ caretColor: "transparent" }}
       />
+
+      {debugEnabled && (
+        <div className="fixed bottom-2 left-2 z-50 px-3 py-2 rounded-lg bg-black/80 text-[11px] text-emerald-300 font-mono leading-snug pointer-events-none">
+          <div>HID debug</div>
+          <div>keystrokes: {debug.keystrokes}</div>
+          <div>last: {debug.lastKey} ({debug.lastSrc})</div>
+          <div>buffer: {debug.bufferLen} chars</div>
+          <div>focado: {debug.focused ? "sim" : "não"}</div>
+          <div>há {debug.lastAt ? Math.round((Date.now() - debug.lastAt) / 100) / 10 : "—"}s</div>
+        </div>
+      )}
 
       <ScannerRadar feedback={feedback} />
 
