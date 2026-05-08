@@ -15,6 +15,7 @@ import {
   ArrowRight,
   RotateCcw,
   QrCode,
+  Camera,
 } from "lucide-react";
 import { apiBaseUrl, publicAnonKey } from "@/utils/supabase/info";
 
@@ -405,6 +406,7 @@ function ScanView({
   onCpfSubmit: (cpfDigitos: string) => void;
 }) {
   const [cpfOpen, setCpfOpen] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const [feedback, setFeedback] = useState(false);
   const [debug, setDebug] = useState<{
     keystrokes: number;
@@ -431,9 +433,9 @@ function ScanView({
   // o input invisível de receber keystrokes externos, então a captura roda
   // primária no `document` (cobre Android) com o input invisível focado só
   // pra "ancorar" o foco e evitar abrir teclado virtual em outros elementos.
-  // O modal de CPF pausa a captura para o numpad virtual não conflitar.
+  // Os modais de CPF e Câmera pausam a captura para não conflitar.
   useEffect(() => {
-    if (cpfOpen) return;
+    if (cpfOpen || cameraOpen) return;
 
     let buffer = "";
     let lastKeyAt = 0;
@@ -521,7 +523,7 @@ function ScanView({
       clearInterval(interval);
       if (feedbackTimeout) clearTimeout(feedbackTimeout);
     };
-  }, [cpfOpen, debugEnabled]);
+  }, [cpfOpen, cameraOpen, debugEnabled]);
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-8 py-6">
@@ -556,20 +558,30 @@ function ScanView({
       <ScannerRadar feedback={feedback} />
 
       <h2 className="mt-10 text-2xl font-semibold text-[#322D67] text-center max-w-md leading-snug">
-        Aproxime o QR Code do seu agendamento no leitor
+        Bem-vindo ao recebimento
       </h2>
       <p className="mt-3 text-sm text-[#322D67]/60 text-center max-w-sm">
-        Posicione o código em frente ao leitor.
+        Para iniciar, leia o QR Code do seu agendamento ou digite seu CPF.
       </p>
 
-      <button
-        type="button"
-        onClick={() => setCpfOpen(true)}
-        className="mt-12 inline-flex items-center gap-3 px-8 py-4 rounded-2xl bg-white hover:bg-[#CE9D58]/5 border-2 border-[#CE9D58] text-[#322D67] text-lg font-medium transition-all"
-      >
-        <KeyRound className="w-5 h-5 text-[#CE9D58]" />
-        Digitar CPF
-      </button>
+      <div className="mt-12 flex flex-col gap-3 w-full max-w-xs">
+        <button
+          type="button"
+          onClick={() => setCameraOpen(true)}
+          className="inline-flex items-center justify-center gap-3 px-8 py-4 rounded-2xl bg-[#CE9D58] hover:bg-[#b88847] text-white text-lg font-semibold transition-all shadow-lg shadow-[#CE9D58]/25"
+        >
+          <Camera className="w-5 h-5" />
+          Ler QR Code
+        </button>
+        <button
+          type="button"
+          onClick={() => setCpfOpen(true)}
+          className="inline-flex items-center justify-center gap-3 px-8 py-4 rounded-2xl bg-white hover:bg-[#CE9D58]/5 border-2 border-[#CE9D58] text-[#322D67] text-lg font-medium transition-all"
+        >
+          <KeyRound className="w-5 h-5 text-[#CE9D58]" />
+          Digitar CPF
+        </button>
+      </div>
 
       <AnimatePresence>
         {cpfOpen && (
@@ -578,6 +590,17 @@ function ScanView({
             onSubmit={(cpfDig) => {
               setCpfOpen(false);
               onCpfSubmit(cpfDig);
+            }}
+          />
+        )}
+        {cameraOpen && (
+          <CameraModal
+            onClose={() => setCameraOpen(false)}
+            onDetected={(tk) => {
+              setCameraOpen(false);
+              setFeedback(true);
+              setTimeout(() => setFeedback(false), 600);
+              onTokenDetectedRef.current(tk);
             }}
           />
         )}
@@ -1108,5 +1131,143 @@ function ErroView({
         Tentar novamente
       </button>
     </div>
+  );
+}
+
+// Modal de leitura por câmera do tablet — usa html5-qrcode (já no projeto).
+// Carregamento dinâmico para não inflar o bundle inicial; só baixa a lib
+// quando o operador toca em "Ler QR Code".
+function CameraModal({
+  onClose,
+  onDetected,
+}: {
+  onClose: () => void;
+  onDetected: (token: string) => void;
+}) {
+  const containerId = "totem-qr-camera";
+  const scannerRef = useRef<{
+    stop: () => Promise<void>;
+    clear: () => void;
+  } | null>(null);
+  const onDetectedRef = useRef(onDetected);
+  const handledRef = useRef(false);
+  const [error, setError] = useState<string | null>(null);
+  const [starting, setStarting] = useState(true);
+
+  useEffect(() => {
+    onDetectedRef.current = onDetected;
+  }, [onDetected]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const init = async () => {
+      try {
+        const { Html5Qrcode } = await import("html5-qrcode");
+        if (cancelled) return;
+        const scanner = new Html5Qrcode(containerId);
+        scannerRef.current = scanner;
+        await scanner.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 280, height: 280 } },
+          (decodedText: string) => {
+            if (handledRef.current) return;
+            handledRef.current = true;
+            const match = decodedText.match(
+              /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+            );
+            const tk = match ? match[0] : decodedText.trim();
+            const sc = scannerRef.current;
+            if (sc) {
+              sc.stop().then(() => sc.clear()).catch(() => {});
+              scannerRef.current = null;
+            }
+            if (tk.length > 0) onDetectedRef.current(tk);
+          },
+          () => {
+            // frames sem QR — silencioso
+          },
+        );
+        if (!cancelled) setStarting(false);
+      } catch (err) {
+        if (cancelled) return;
+        console.error("CameraModal:", err);
+        const msg = String(
+          (err as { message?: string })?.message ?? err ?? "",
+        ).toLowerCase();
+        setError(
+          msg.includes("permission") || msg.includes("notallowed")
+            ? "Permissão de câmera negada. Libere o acesso nas configurações do navegador."
+            : "Não foi possível acessar a câmera. Tente novamente ou use o CPF.",
+        );
+        setStarting(false);
+      }
+    };
+    init();
+
+    return () => {
+      cancelled = true;
+      const sc = scannerRef.current;
+      if (sc) {
+        sc.stop().then(() => sc.clear()).catch(() => {});
+        scannerRef.current = null;
+      }
+    };
+  }, []);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-white z-50 flex flex-col"
+    >
+      <div className="flex items-center justify-between px-6 py-5 border-b border-[#322D67]/10">
+        <div>
+          <h3 className="text-lg font-semibold text-[#322D67]">Leia o QR Code</h3>
+          <p className="text-xs text-[#322D67]/60">
+            Aproxime o código do agendamento
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="w-11 h-11 rounded-full bg-[#322D67]/5 hover:bg-[#322D67]/10 flex items-center justify-center transition-colors"
+        >
+          <X className="w-5 h-5 text-[#322D67]" />
+        </button>
+      </div>
+
+      <div className="flex-1 flex flex-col items-center justify-center px-6 py-8">
+        <div className="relative w-full max-w-md aspect-square">
+          <div
+            id={containerId}
+            className="w-full h-full rounded-3xl overflow-hidden bg-black"
+          />
+          {/* Cantos guias dourados pra enquadrar */}
+          <div className="pointer-events-none absolute inset-6">
+            <div className="absolute top-0 left-0 w-12 h-12 border-l-4 border-t-4 border-[#CE9D58] rounded-tl-2xl" />
+            <div className="absolute top-0 right-0 w-12 h-12 border-r-4 border-t-4 border-[#CE9D58] rounded-tr-2xl" />
+            <div className="absolute bottom-0 left-0 w-12 h-12 border-l-4 border-b-4 border-[#CE9D58] rounded-bl-2xl" />
+            <div className="absolute bottom-0 right-0 w-12 h-12 border-r-4 border-b-4 border-[#CE9D58] rounded-br-2xl" />
+          </div>
+          {starting && !error && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Loader2 className="w-12 h-12 animate-spin text-[#CE9D58]" />
+            </div>
+          )}
+        </div>
+
+        {error ? (
+          <div className="mt-6 max-w-md w-full bg-rose-50 border-2 border-rose-300 rounded-2xl p-4 flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-rose-700">{error}</p>
+          </div>
+        ) : (
+          <p className="mt-6 text-sm text-[#322D67]/60 text-center max-w-sm">
+            O código é reconhecido automaticamente ao enquadrar.
+          </p>
+        )}
+      </div>
+    </motion.div>
   );
 }
