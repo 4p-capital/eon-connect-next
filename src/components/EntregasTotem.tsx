@@ -292,7 +292,7 @@ export function EntregasTotem() {
               exit={{ opacity: 0 }}
               className="flex-1 flex items-center justify-center"
             >
-              <Loader2 className="w-16 h-16 animate-spin text-amber-400" />
+              <Loader2 className="w-16 h-16 animate-spin text-[#CE9D58]" />
             </motion.div>
           )}
 
@@ -367,10 +367,10 @@ export function EntregasTotem() {
 
 function TotemHeader() {
   return (
-    <header className="px-8 pt-8 pb-4 flex items-center justify-between">
+    <header className="px-8 pt-8 pb-4 flex items-center justify-between border-b border-[#322D67]/10">
       <div>
-        <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">BP Construtora</p>
-        <h1 className="text-xl font-semibold text-white">Recebimento Gran Santorini</h1>
+        <p className="text-[10px] uppercase tracking-[0.2em] text-[#CE9D58] font-semibold">BP Construtora</p>
+        <h1 className="text-xl font-semibold text-[#322D67]">Recebimento Gran Santorini</h1>
       </div>
       <ClockBadge />
     </header>
@@ -392,7 +392,7 @@ function ClockBadge() {
   });
   return (
     <div className="text-right">
-      <p className="text-xs text-slate-400">{fmt.format(now)}</p>
+      <p className="text-xs text-[#322D67]/60">{fmt.format(now)}</p>
     </div>
   );
 }
@@ -555,19 +555,19 @@ function ScanView({
 
       <ScannerRadar feedback={feedback} />
 
-      <h2 className="mt-10 text-2xl font-semibold text-white text-center max-w-md leading-snug">
+      <h2 className="mt-10 text-2xl font-semibold text-[#322D67] text-center max-w-md leading-snug">
         Aproxime o QR Code do seu agendamento no leitor
       </h2>
-      <p className="mt-3 text-sm text-slate-400 text-center max-w-sm">
+      <p className="mt-3 text-sm text-[#322D67]/60 text-center max-w-sm">
         Posicione o código em frente ao leitor.
       </p>
 
       <button
         type="button"
         onClick={() => setCpfOpen(true)}
-        className="mt-12 inline-flex items-center gap-3 px-8 py-4 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/20 text-white text-lg font-medium transition-all"
+        className="mt-12 inline-flex items-center gap-3 px-8 py-4 rounded-2xl bg-white hover:bg-[#CE9D58]/5 border-2 border-[#CE9D58] text-[#322D67] text-lg font-medium transition-all"
       >
-        <KeyRound className="w-5 h-5" />
+        <KeyRound className="w-5 h-5 text-[#CE9D58]" />
         Digitar CPF
       </button>
 
@@ -597,8 +597,8 @@ function ScannerRadar({ feedback }: { feedback: boolean }) {
         initial={{ scale: 0.6, opacity: 0.6 }}
         animate={{ scale: 1.1, opacity: 0 }}
         transition={{ duration: 2.2, repeat: Infinity, ease: "easeOut" }}
-        className={`absolute inset-0 rounded-full border ${
-          feedback ? "border-emerald-400" : "border-amber-400/50"
+        className={`absolute inset-0 rounded-full border-2 ${
+          feedback ? "border-emerald-500" : "border-[#CE9D58]/60"
         }`}
       />
       <motion.div
@@ -606,21 +606,21 @@ function ScannerRadar({ feedback }: { feedback: boolean }) {
         animate={{ scale: 1.05, opacity: 0 }}
         transition={{ duration: 2.2, repeat: Infinity, ease: "easeOut", delay: 0.7 }}
         className={`absolute inset-0 rounded-full border ${
-          feedback ? "border-emerald-400/80" : "border-amber-400/40"
+          feedback ? "border-emerald-500/70" : "border-[#CE9D58]/40"
         }`}
       />
-      <div className="absolute inset-6 rounded-full border border-white/5" />
+      <div className="absolute inset-6 rounded-full border border-[#322D67]/5" />
 
       {/* Núcleo com ícone de QR */}
       <div
-        className={`relative w-28 h-28 rounded-2xl border shadow-2xl flex items-center justify-center overflow-hidden transition-colors ${
+        className={`relative w-28 h-28 rounded-2xl border-2 shadow-xl flex items-center justify-center overflow-hidden transition-colors ${
           feedback
-            ? "bg-emerald-500/30 border-emerald-400"
-            : "bg-slate-900 border-white/10"
+            ? "bg-emerald-50 border-emerald-500"
+            : "bg-white border-[#CE9D58]"
         }`}
       >
         <QrCode
-          className={`w-14 h-14 ${feedback ? "text-emerald-300" : "text-amber-400"}`}
+          className={`w-14 h-14 ${feedback ? "text-emerald-600" : "text-[#322D67]"}`}
           strokeWidth={1.5}
         />
         {/* Linha radar atravessando o ícone */}
@@ -628,8 +628,8 @@ function ScannerRadar({ feedback }: { feedback: boolean }) {
           initial={{ y: "-100%" }}
           animate={{ y: "100%" }}
           transition={{ duration: 2.4, repeat: Infinity, ease: "linear" }}
-          className={`pointer-events-none absolute inset-x-0 h-1 bg-gradient-to-b from-transparent to-transparent shadow-[0_0_20px_rgba(251,191,36,0.6)] ${
-            feedback ? "via-emerald-300" : "via-amber-400"
+          className={`pointer-events-none absolute inset-x-0 h-1 bg-gradient-to-b from-transparent to-transparent shadow-[0_0_20px_rgba(206,157,88,0.7)] ${
+            feedback ? "via-emerald-500" : "via-[#CE9D58]"
           }`}
         />
       </div>
@@ -665,7 +665,7 @@ function CpfModal({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40"
+        className="fixed inset-0 bg-[#322D67]/30 backdrop-blur-sm z-40"
         onClick={onClose}
       />
       <motion.div
@@ -673,21 +673,21 @@ function CpfModal({
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 30 }}
         transition={{ type: "spring", bounce: 0.1, duration: 0.3 }}
-        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-md w-full bg-slate-900 border-t border-white/10 rounded-t-3xl p-8"
+        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-md w-full bg-white border-t-4 border-[#CE9D58] rounded-t-3xl p-8 shadow-2xl"
       >
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-xl font-semibold text-white">Digite seu CPF</h3>
+          <h3 className="text-xl font-semibold text-[#322D67]">Digite seu CPF</h3>
           <button
             onClick={onClose}
-            className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/15 flex items-center justify-center"
+            className="w-10 h-10 rounded-full bg-[#322D67]/5 hover:bg-[#322D67]/10 flex items-center justify-center transition-colors"
           >
-            <X className="w-5 h-5 text-white" />
+            <X className="w-5 h-5 text-[#322D67]" />
           </button>
         </div>
 
-        <div className="bg-white/10 border border-white/20 rounded-2xl px-6 py-5 mb-6">
-          <p className="text-3xl font-mono text-white text-center tracking-wider">
-            {formatado || <span className="text-slate-500">000.000.000-00</span>}
+        <div className="bg-[#322D67]/5 border border-[#322D67]/15 rounded-2xl px-6 py-5 mb-6">
+          <p className="text-3xl font-mono text-[#322D67] text-center tracking-wider">
+            {formatado || <span className="text-[#322D67]/30">000.000.000-00</span>}
           </p>
         </div>
 
@@ -704,7 +704,7 @@ function CpfModal({
           type="button"
           disabled={!podeEnviar}
           onClick={() => onSubmit(cpfDigitos)}
-          className="w-full py-4 rounded-2xl bg-amber-500 hover:bg-amber-400 disabled:bg-white/10 disabled:text-slate-500 text-slate-950 text-lg font-semibold transition-all"
+          className="w-full py-4 rounded-2xl bg-[#CE9D58] hover:bg-[#b88847] disabled:bg-[#322D67]/10 disabled:text-[#322D67]/30 text-white text-lg font-semibold transition-all shadow-lg shadow-[#CE9D58]/20 disabled:shadow-none"
         >
           Buscar
         </button>
@@ -726,7 +726,7 @@ function KeyButton({
     <button
       type="button"
       onClick={onClick}
-      className="h-16 rounded-2xl bg-white/10 hover:bg-white/15 active:bg-white/20 flex items-center justify-center text-2xl font-medium text-white transition-all"
+      className="h-16 rounded-2xl bg-[#322D67]/5 hover:bg-[#322D67]/10 active:bg-[#322D67]/15 border border-[#322D67]/10 flex items-center justify-center text-2xl font-medium text-[#322D67] transition-all"
     >
       {icon ?? label}
     </button>
@@ -755,14 +755,14 @@ function ResumoView({
     <div className="flex-1 flex flex-col items-center justify-center px-8 py-6">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-emerald-500/20 mb-4">
-            <Check className="w-10 h-10 text-emerald-400" />
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-emerald-50 border-2 border-emerald-500 mb-4">
+            <Check className="w-10 h-10 text-emerald-600" strokeWidth={2.5} />
           </div>
-          <p className="text-xs uppercase tracking-[0.2em] text-emerald-400 mb-2">Tudo pronto</p>
-          <h2 className="text-3xl font-semibold text-white mb-2">
+          <p className="text-xs uppercase tracking-[0.2em] text-[#CE9D58] font-semibold mb-2">Tudo pronto</p>
+          <h2 className="text-3xl font-semibold text-[#322D67] mb-2">
             Olá, {primeiroNome(cliente.nome)}!
           </h2>
-          <p className="text-slate-400">
+          <p className="text-[#322D67]/60">
             Bloco {cliente.bloco} · Unidade {cliente.unidade}
           </p>
         </div>
@@ -776,7 +776,7 @@ function ResumoView({
         <button
           type="button"
           onClick={onIniciar}
-          className="w-full py-5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xl font-semibold transition-all flex items-center justify-center gap-2"
+          className="w-full py-5 rounded-2xl bg-[#CE9D58] hover:bg-[#b88847] text-white text-xl font-semibold transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#CE9D58]/25"
         >
           Iniciar assinatura
           <ArrowRight className="w-5 h-5" />
@@ -784,7 +784,7 @@ function ResumoView({
         <button
           type="button"
           onClick={onCancelar}
-          className="w-full mt-3 py-3 rounded-2xl text-slate-400 hover:text-white text-sm font-medium transition-all"
+          className="w-full mt-3 py-3 rounded-2xl text-[#322D67]/60 hover:text-[#322D67] text-sm font-medium transition-all"
         >
           Cancelar
         </button>
@@ -795,15 +795,15 @@ function ResumoView({
 
 function ChecklistItem({ ok, label }: { ok: boolean; label: string }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/5 border border-white/10">
+    <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white border border-[#322D67]/10">
       <div
         className={`w-6 h-6 rounded-full flex items-center justify-center ${
-          ok ? "bg-emerald-500/20" : "bg-slate-700"
+          ok ? "bg-emerald-500" : "bg-[#322D67]/10"
         }`}
       >
-        <Check className={`w-4 h-4 ${ok ? "text-emerald-400" : "text-slate-500"}`} />
+        <Check className={`w-4 h-4 ${ok ? "text-white" : "text-[#322D67]/30"}`} strokeWidth={3} />
       </div>
-      <span className="text-white">{label}</span>
+      <span className="text-[#322D67] font-medium">{label}</span>
     </div>
   );
 }
@@ -856,16 +856,16 @@ function PesquisaView({
           <div
             key={i}
             className={`flex-1 h-1.5 rounded-full transition-all ${
-              i <= step ? "bg-amber-500" : "bg-white/10"
+              i <= step ? "bg-[#CE9D58]" : "bg-[#322D67]/10"
             }`}
           />
         ))}
       </div>
-      <p className="text-xs text-slate-400 mb-1">
+      <p className="text-xs text-[#CE9D58] font-semibold uppercase tracking-wider mb-1">
         Pergunta {step + 1} de {PASSOS}
       </p>
 
-      <h2 className="text-2xl font-semibold text-white leading-snug mb-8">
+      <h2 className="text-2xl font-semibold text-[#322D67] leading-snug mb-8">
         {atualStep.titulo}
       </h2>
 
@@ -879,7 +879,7 @@ function PesquisaView({
             type="button"
             onClick={onBack}
             disabled={submitting}
-            className="px-5 py-4 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-medium flex items-center gap-2 transition-all disabled:opacity-40"
+            className="px-5 py-4 rounded-2xl bg-[#322D67]/5 hover:bg-[#322D67]/10 border border-[#322D67]/15 text-[#322D67] font-medium flex items-center gap-2 transition-all disabled:opacity-40"
           >
             <ChevronLeft className="w-5 h-5" />
             Voltar
@@ -889,7 +889,7 @@ function PesquisaView({
             type="button"
             onClick={onCancelar}
             disabled={submitting}
-            className="px-5 py-4 rounded-2xl text-slate-400 hover:text-white font-medium transition-all"
+            className="px-5 py-4 rounded-2xl text-[#322D67]/60 hover:text-[#322D67] font-medium transition-all"
           >
             Cancelar
           </button>
@@ -900,7 +900,7 @@ function PesquisaView({
             type="button"
             onClick={onFinalizar}
             disabled={!podeAvancar || submitting}
-            className="flex-1 py-4 rounded-2xl bg-amber-500 hover:bg-amber-400 disabled:bg-white/10 disabled:text-slate-500 text-slate-950 text-lg font-semibold transition-all flex items-center justify-center gap-2"
+            className="flex-1 py-4 rounded-2xl bg-[#CE9D58] hover:bg-[#b88847] disabled:bg-[#322D67]/10 disabled:text-[#322D67]/30 text-white text-lg font-semibold transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#CE9D58]/20 disabled:shadow-none"
           >
             {submitting ? (
               <>
@@ -919,7 +919,7 @@ function PesquisaView({
             type="button"
             onClick={onNext}
             disabled={!podeAvancar}
-            className="flex-1 py-4 rounded-2xl bg-amber-500 hover:bg-amber-400 disabled:bg-white/10 disabled:text-slate-500 text-slate-950 text-lg font-semibold transition-all flex items-center justify-center gap-2"
+            className="flex-1 py-4 rounded-2xl bg-[#CE9D58] hover:bg-[#b88847] disabled:bg-[#322D67]/10 disabled:text-[#322D67]/30 text-white text-lg font-semibold transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#CE9D58]/20 disabled:shadow-none"
           >
             Continuar
             <ChevronRight className="w-5 h-5" />
@@ -987,9 +987,9 @@ function PesquisaCampo({
           rows={6}
           maxLength={2000}
           placeholder="Sua sugestão (opcional)"
-          className="w-full px-5 py-4 rounded-2xl bg-white/5 border border-white/10 text-white text-base placeholder:text-slate-500 focus:outline-none focus:border-amber-400/50"
+          className="w-full px-5 py-4 rounded-2xl bg-white border border-[#322D67]/15 text-[#322D67] text-base placeholder:text-[#322D67]/40 focus:outline-none focus:border-[#CE9D58] focus:ring-2 focus:ring-[#CE9D58]/20 transition-all"
         />
-        <p className="mt-2 text-xs text-slate-500">
+        <p className="mt-2 text-xs text-[#322D67]/50">
           Esta pergunta é opcional — você pode pular tocando em Continuar.
         </p>
       </div>
@@ -1010,13 +1010,13 @@ function PesquisaCampo({
           >
             <Star
               className={`w-14 h-14 ${
-                n <= valor ? "fill-amber-400 text-amber-400" : "text-slate-600"
+                n <= valor ? "fill-[#CE9D58] text-[#CE9D58]" : "text-[#322D67]/20"
               }`}
             />
           </button>
         ))}
       </div>
-      <p className="text-lg text-white font-medium h-7">
+      <p className="text-lg text-[#322D67] font-medium h-7">
         {pesquisa.estrelas ? ESTRELAS_LABELS[pesquisa.estrelas] : ""}
       </p>
     </div>
@@ -1041,15 +1041,15 @@ function OpcoesGrid({
             key={op.value}
             type="button"
             onClick={() => onSelect(op.value)}
-            className={`px-5 py-4 rounded-2xl text-left flex items-center gap-3 transition-all border ${
+            className={`px-5 py-4 rounded-2xl text-left flex items-center gap-3 transition-all border-2 ${
               ativo
-                ? "bg-amber-500/15 border-amber-400 text-white"
-                : "bg-white/5 border-white/10 hover:bg-white/10 text-white"
+                ? "bg-[#CE9D58]/10 border-[#CE9D58] text-[#322D67]"
+                : "bg-white border-[#322D67]/10 hover:border-[#CE9D58]/40 hover:bg-[#CE9D58]/5 text-[#322D67]"
             }`}
           >
             {op.emoji && <span className="text-2xl">{op.emoji}</span>}
             <span className="text-base font-medium flex-1">{op.label}</span>
-            {ativo && <Check className="w-5 h-5 text-amber-400" />}
+            {ativo && <Check className="w-5 h-5 text-[#CE9D58]" strokeWidth={3} />}
           </button>
         );
       })}
@@ -1060,23 +1060,23 @@ function OpcoesGrid({
 function FinalizadoView({ onVoltar }: { onVoltar: () => void }) {
   return (
     <div className="w-full max-w-md text-center">
-      <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-emerald-500/20 mb-6">
-        <Check className="w-12 h-12 text-emerald-400" />
+      <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-emerald-50 border-2 border-emerald-500 mb-6">
+        <Check className="w-12 h-12 text-emerald-600" strokeWidth={2.5} />
       </div>
-      <h2 className="text-3xl font-semibold text-white mb-3">Pesquisa registrada!</h2>
-      <p className="text-slate-400 mb-2">
+      <h2 className="text-3xl font-semibold text-[#322D67] mb-3">Pesquisa registrada!</h2>
+      <p className="text-[#322D67]/60 mb-2">
         Obrigado por compartilhar sua opinião sobre o Gran Santorini.
       </p>
-      <div className="mt-8 px-5 py-4 rounded-2xl bg-amber-500/10 border border-amber-500/30">
-        <p className="text-sm text-amber-200">
-          <strong>Próxima etapa:</strong> assinatura digital do termo de
+      <div className="mt-8 px-5 py-4 rounded-2xl bg-[#CE9D58]/10 border border-[#CE9D58]/40">
+        <p className="text-sm text-[#322D67]">
+          <strong className="text-[#CE9D58]">Próxima etapa:</strong> assinatura digital do termo de
           recebimento — em construção.
         </p>
       </div>
       <button
         type="button"
         onClick={onVoltar}
-        className="mt-10 inline-flex items-center gap-2 px-8 py-4 rounded-2xl bg-white/10 hover:bg-white/15 text-white text-lg font-medium transition-all"
+        className="mt-10 inline-flex items-center gap-2 px-8 py-4 rounded-2xl bg-[#322D67]/5 hover:bg-[#322D67]/10 border border-[#322D67]/15 text-[#322D67] text-lg font-medium transition-all"
       >
         <Home className="w-5 h-5" />
         Voltar ao início
@@ -1094,15 +1094,15 @@ function ErroView({
 }) {
   return (
     <div className="w-full max-w-md text-center">
-      <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-rose-500/20 mb-6">
-        <AlertTriangle className="w-12 h-12 text-rose-400" />
+      <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-rose-50 border-2 border-rose-500 mb-6">
+        <AlertTriangle className="w-12 h-12 text-rose-600" />
       </div>
-      <h2 className="text-3xl font-semibold text-white mb-3">Não foi possível continuar</h2>
-      <p className="text-slate-400 mb-8">{mensagem}</p>
+      <h2 className="text-3xl font-semibold text-[#322D67] mb-3">Não foi possível continuar</h2>
+      <p className="text-[#322D67]/60 mb-8">{mensagem}</p>
       <button
         type="button"
         onClick={onVoltar}
-        className="inline-flex items-center gap-2 px-8 py-4 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-lg font-semibold transition-all"
+        className="inline-flex items-center gap-2 px-8 py-4 rounded-2xl bg-[#CE9D58] hover:bg-[#b88847] text-white text-lg font-semibold transition-all shadow-lg shadow-[#CE9D58]/20"
       >
         <RotateCcw className="w-5 h-5" />
         Tentar novamente
