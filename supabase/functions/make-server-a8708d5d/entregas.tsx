@@ -2152,8 +2152,17 @@ entregasRoutes.get("/entregas/pendencias/eficiencia", async (c) => {
     };
     const porResolvedor: Record<string, number> = {};
 
+    // Só contam transições de pendencia_* — toggles de em_contato_* compartilham
+    // setor com pendencia mas não alteram o estoque de pendências.
+    const ehCampoDePendencia = (campo: string) =>
+      campo === "pendencia_agehab" ||
+      campo === "pendencia_prosoluto" ||
+      campo === "pendencia_jurosobra" ||
+      campo === "pendencia_reras";
+
     for (const r of toggles || []) {
       const x = r as any;
+      if (!ehCampoDePendencia(x.campo)) continue;
       const s = x.setor as Setor;
       if (x.valor_anterior === true && x.valor_novo === false) {
         if (s in resolvidas) (resolvidas as any)[s] += 1;
@@ -2185,10 +2194,13 @@ entregasRoutes.get("/entregas/pendencias/eficiencia", async (c) => {
       }
     }
 
-    // Mudanças líquidas por dia/setor (resolvidas reduzem, reabertas aumentam)
+    // Mudanças líquidas por dia/setor (resolvidas reduzem, reabertas aumentam).
+    // Ignora toggles de em_contato_* — eles compartilham setor com pendencia
+    // mas não alteram o estoque de pendências.
     const deltaPorDia: Record<string, { agehab: number; financeiro: number; contratos: number }> = {};
     for (const r of toggles || []) {
       const x = r as any;
+      if (!ehCampoDePendencia(x.campo)) continue;
       const k = dayKey(x.alterado_em);
       if (!deltaPorDia[k]) deltaPorDia[k] = { agehab: 0, financeiro: 0, contratos: 0 };
       const delta = x.valor_anterior === true && x.valor_novo === false ? -1
@@ -2232,17 +2244,18 @@ entregasRoutes.get("/entregas/pendencias/eficiencia", async (c) => {
         contratos: acc.contratos + delta.contratos,
       };
 
-      // Aplica todos os toggles do dia ao estado por cliente.
+      // Aplica todos os toggles de pendencia_* do dia ao estado por cliente.
+      // Toggles de em_contato_* não afetam o estado de pendências do cliente.
       const fimDoDia = `${d}T23:59:59.999Z`;
       while (cursorTog < togglesOrd.length && String((togglesOrd[cursorTog] as any).alterado_em) <= fimDoDia) {
         const t: any = togglesOrd[cursorTog];
-        const id = String((t as any).cliente_entrega_id ?? "");
-        // O log inclui cliente_entrega_id no SELECT? — relemos com cliente_entrega_id abaixo.
-        // (campo, valor_novo) determinam mudança de pertencimento ao set.
-        const set = estadoPorCliente.get(id) || new Set<string>();
-        if (t.valor_novo === false) set.delete(t.campo);
-        else if (t.valor_novo === true) set.add(t.campo);
-        estadoPorCliente.set(id, set);
+        if (ehCampoDePendencia(t.campo)) {
+          const id = String((t as any).cliente_entrega_id ?? "");
+          const set = estadoPorCliente.get(id) || new Set<string>();
+          if (t.valor_novo === false) set.delete(t.campo);
+          else if (t.valor_novo === true) set.add(t.campo);
+          estadoPorCliente.set(id, set);
+        }
         cursorTog++;
       }
 
