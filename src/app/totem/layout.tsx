@@ -10,12 +10,12 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#000000",
+  themeColor: "#FFFFFF",
 };
 
 export default function TotemLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen bg-white text-[#322D67]">
       <TotemErrorBoundary>{children}</TotemErrorBoundary>
     </div>
   );
