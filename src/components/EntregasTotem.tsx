@@ -424,6 +424,7 @@ function ScanView({
 
     let buffer = "";
     let lastKeyAt = 0;
+    let feedbackTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const processarKey = (e: KeyboardEvent) => {
       const now = Date.now();
@@ -432,20 +433,22 @@ function ScanView({
       if (now - lastKeyAt > 100) buffer = "";
       lastKeyAt = now;
 
-      // Aceita Enter, NumpadEnter, e \r/\n caso o leitor envie como Tab/CR.
-      if (e.key === "Enter" || e.key === "NumpadEnter") {
+      // Aceita Enter (principal e numpad) e Tab como sufixos de fim de leitura.
+      // Tab é comum em leitores configurados como "wedge" para campos de form.
+      const isTerminador =
+        e.key === "Enter" || e.code === "NumpadEnter" || e.key === "Tab";
+      if (isTerminador) {
         e.preventDefault();
         const match = buffer.match(
           /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
         );
         const tk = match ? match[0] : buffer.trim();
         buffer = "";
-        // Limpa o input visualmente também
         if (inputRef.current) inputRef.current.value = "";
         if (tk.length > 0) {
-          // Feedback visual rápido: pisca o radar ao reconhecer
           setFeedback(true);
-          setTimeout(() => setFeedback(false), 250);
+          if (feedbackTimeout) clearTimeout(feedbackTimeout);
+          feedbackTimeout = setTimeout(() => setFeedback(false), 600);
           onTokenDetectedRef.current(tk);
         }
         return;
@@ -490,22 +493,22 @@ function ScanView({
       if (inputEl) inputEl.removeEventListener("keydown", processarKey);
       window.removeEventListener("keydown", onWinKey);
       clearInterval(interval);
+      if (feedbackTimeout) clearTimeout(feedbackTimeout);
     };
   }, [cpfOpen]);
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-8 py-6">
       {/* Input invisível que recebe os keystrokes do leitor HID.
-          inputMode=none impede o teclado virtual de abrir em mobile. */}
+          inputMode=none impede o teclado virtual de abrir em mobile.
+          O foco é mantido por setInterval no efeito acima. */}
       <input
         ref={inputRef}
         type="text"
         inputMode="none"
-        autoFocus
         autoComplete="off"
         autoCorrect="off"
         spellCheck={false}
-        aria-hidden="true"
         tabIndex={-1}
         className="absolute opacity-0 pointer-events-none w-px h-px"
         style={{ top: -9999, left: -9999 }}
